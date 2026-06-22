@@ -28,27 +28,56 @@ interface WordState {
   getTodayWords: () => Word[];
 }
 
+const STORAGE_KEY = 'momoselector_recent_words';
+
+function loadRecentWords(): Word[] {
+  try {
+    const data = localStorage.getItem(STORAGE_KEY);
+    if (data) {
+      const words = JSON.parse(data);
+      return words.map((w: any) => ({
+        ...w,
+        addedAt: new Date(w.addedAt),
+      }));
+    }
+  } catch {
+    // ignore
+  }
+  return [];
+}
+
+function saveRecentWords(words: Word[]) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(words));
+  } catch {
+    // ignore
+  }
+}
+
 export const useWordStore = create<WordState>((set, get) => ({
   currentWord: null,
-  recentWords: [],
+  recentWords: loadRecentWords(),
   logs: [],
   setCurrentWord: (word) => set({ currentWord: word }),
   addRecentWord: (word) =>
     set((state) => {
+      let newWords: Word[];
       const exists = state.recentWords.find(w => w.spelling === word.spelling);
       if (exists) {
-        return {
-          recentWords: [
-            { ...word, addedAt: new Date() },
-            ...state.recentWords.filter(w => w.spelling !== word.spelling)
-          ].slice(0, 50),
-        };
+        newWords = [
+          { ...word, addedAt: new Date() },
+          ...state.recentWords.filter(w => w.spelling !== word.spelling)
+        ].slice(0, 50);
+      } else {
+        newWords = [word, ...state.recentWords].slice(0, 50);
       }
-      return {
-        recentWords: [word, ...state.recentWords].slice(0, 50),
-      };
+      saveRecentWords(newWords);
+      return { recentWords: newWords };
     }),
-  clearRecentWords: () => set({ recentWords: [] }),
+  clearRecentWords: () => {
+    saveRecentWords([]);
+    set({ recentWords: [] });
+  },
   addLog: (message, type = 'info') =>
     set((state) => ({
       logs: [

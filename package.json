@@ -8,6 +8,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri dev": "tauri dev",
+    "tauri build": "tauri build",
     "api:validate": "node scripts/generate-api-doc.cjs validate",
     "api:stats": "node scripts/generate-api-doc.cjs stats",
     "api:serve": "node scripts/generate-api-doc.cjs serve",
