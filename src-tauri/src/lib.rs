@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 use tauri::Manager;
+use tauri::tray::{TrayIconBuilder, MouseButton, MouseButtonState, TrayIconEvent};
+use tauri::menu::{Menu, MenuItem};
 
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -64,28 +66,30 @@ fn save_settings(app: tauri::AppHandle, settings: Settings) -> Result<(), String
 }
 
 #[tauri::command]
-async fn show_popup_window(app: tauri::AppHandle, x: f64, y: f64, word: String, definitions: Vec<String>, phonetic: String, uk_phonetic: String, voc_id: String, token: String) -> Result<(), String> {
+async fn show_popup_window(app: tauri::AppHandle, x: f64, y: f64, word: String, definitions: Vec<String>, examples: Vec<String>, phonetic: String, uk_phonetic: String, voc_id: String, token: String) -> Result<(), String> {
     use tauri::WebviewUrl;
     use tauri::WebviewWindowBuilder;
     
     // 如果已存在popup窗口，先关闭
     if let Some(window) = app.get_webview_window("popup") {
-        let _ = window.close();
+        let _ = window.destroy();
     }
     
     let popup_width = 400.0;
     let popup_height = 350.0;
     
     let defs_json = serde_json::to_string(&definitions).unwrap_or_default();
+    let examples_json = serde_json::to_string(&examples).unwrap_or_default();
     let encoded_word = urlencoding::encode(&word);
     let encoded_defs = urlencoding::encode(&defs_json);
+    let encoded_examples = urlencoding::encode(&examples_json);
     let encoded_phonetic = urlencoding::encode(&phonetic);
     let encoded_uk = urlencoding::encode(&uk_phonetic);
     let encoded_voc_id = urlencoding::encode(&voc_id);
     let encoded_token = urlencoding::encode(&token);
     let url = format!(
-        "index.html#/popup?word={}&definitions={}&phonetic={}&uk_phonetic={}&voc_id={}&token={}",
-        encoded_word, encoded_defs, encoded_phonetic, encoded_uk, encoded_voc_id, encoded_token
+        "index.html#/popup?word={}&definitions={}&examples={}&phonetic={}&uk_phonetic={}&voc_id={}&token={}",
+        encoded_word, encoded_defs, encoded_examples, encoded_phonetic, encoded_uk, encoded_voc_id, encoded_token
     );
     
     WebviewWindowBuilder::new(
@@ -569,6 +573,56 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .setup(|app| {
+            // 创建托盘菜单
+            let show_i = MenuItem::with_id(app, "show", "显示主窗口", true, None::<&str>)?;
+            let quit_i = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&show_i, &quit_i])?;
+            
+            // 创建系统托盘
+            let _tray = TrayIconBuilder::new()
+                .icon(app.default_window_icon().unwrap().clone())
+                .menu(&menu)
+                .tooltip("MoMo Selector")
+                .on_menu_event(move |app, event| {
+                    match event.id.as_ref() {
+                        "show" => {
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                            }
+                        }
+                        "quit" => {
+                            std::process::exit(0);
+                        }
+                        _ => {}
+                    }
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        let app = tray.app_handle();
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                    }
+                })
+                .build(app)?;
+            
+            Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                // 阻止窗口关闭，改为隐藏到托盘
+                api.prevent_close();
+                let _ = window.hide();
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             greet,
             load_settings,

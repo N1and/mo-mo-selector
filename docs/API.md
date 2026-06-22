@@ -264,7 +264,8 @@ const result = await invoke('lookup_dictionary', { word: 'hello' });
 await invoke('show_popup_window', {
   x: 600, y: 400,
   word: 'hello',
-  definitions: ['int. 你好'],
+  definitions: ['int. 你好', 'n. 问候'],
+  examples: ['Hello, how are you?'],
   phonetic: 'həˈloʊ',
   ukPhonetic: 'həˈləʊ',
   vocId: 'voc_id...',

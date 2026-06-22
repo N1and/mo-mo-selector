@@ -10,6 +10,9 @@
 - **加入学习** - 一键将单词加入墨墨学习列表
 - **词本管理** - 查看、创建、编辑、删除云词本
 - **词本详情** - 查看词本中的单词列表和释义
+- **系统托盘** - 最小化到托盘，托盘菜单显示/退出
+- **今日新增** - 查看今日新增的单词列表
+- **运行日志** - 记录查词、词本操作等日志
 
 ## 技术栈
 
@@ -100,6 +103,8 @@ mo-mo-selector/
 │   ├── components/
 │   │   ├── WordLookup.tsx      # 快捷键查词
 │   │   ├── PopupWindow.tsx     # 独立弹窗窗口
+│   │   ├── Monitor.tsx         # 划词监控
+│   │   ├── TodayWords.tsx      # 今日新增
 │   │   ├── NotepadManager.tsx  # 词本管理
 │   │   ├── NotepadViewer.tsx   # 词本详情
 │   │   ├── Settings.tsx        # 设置

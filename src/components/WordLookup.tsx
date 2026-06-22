@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getClipboardText, checkVocabulary, addWordsToNotepad, lookupDictionary, showPopupWindow } from '../lib/tauri';
-import { useSettingsStore, useNotepadStore, useWordStore } from '../stores';
+import { getClipboardText, checkVocabulary, addWordsToNotepad, lookupDictionary, showPopupWindow, closePopupWindow } from '../lib/tauri';
+import { useSettingsStore, useNotepadStore, useWordStore, useToastStore } from '../stores';
 
 interface WordPopup {
   visible: boolean;
@@ -13,7 +13,8 @@ interface WordPopup {
 export function WordLookup() {
   const { settings } = useSettingsStore();
   const { notepads } = useNotepadStore();
-  const { addRecentWord } = useWordStore();
+  const { addRecentWord, setCurrentWord, addLog } = useWordStore();
+  const showToast = useToastStore((s) => s.show);
   
   const [popup, setPopup] = useState<WordPopup>({
     visible: false,
@@ -26,33 +27,34 @@ export function WordLookup() {
   const [showNotepadPicker, setShowNotepadPicker] = useState(false);
   const [selectedId, setSelectedId] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
 
   const lookupWord = useCallback(async (mouseX?: number, mouseY?: number) => {
     if (!settings.maimemoToken) {
-      setError('请先配置 API Token');
+      showToast('请先配置 API Token', 'error');
+      addLog('请先配置 API Token', 'error');
       return;
     }
 
     try {
+      await closePopupWindow();
+      await new Promise(resolve => setTimeout(resolve, 150));
       const text = await getClipboardText();
       console.log('Clipboard text:', text);
       
       if (!text || !text.trim()) {
-        setError('剪贴板为空');
-        setTimeout(() => setError(''), 2000);
+        showToast('剪贴板为空', 'error');
+        addLog('剪贴板为空', 'error');
         return;
       }
       
       const word = text.trim();
       if (!/^[a-zA-Z]+$/.test(word)) {
-        setError('剪贴板内容不是英文单词');
-        setTimeout(() => setError(''), 2000);
+        showToast('剪贴板内容不是英文单词', 'error');
+        addLog(`剪贴板内容不是英文单词: "${word}"`, 'error');
         return;
       }
 
       setIsLoading(true);
-      setError('');
       
       const [vocabResult, dictResult] = await Promise.all([
         checkVocabulary(word, settings.maimemoToken).catch(() => null),
@@ -74,6 +76,7 @@ export function WordLookup() {
           y,
           word,
           dictData?.definitions || [],
+          dictData?.examples?.map((e: any) => e.sentence) || [],
           dictData?.phonetic || '',
           dictData?.uk_phonetic || '',
           vocData?.id || '',
@@ -90,20 +93,37 @@ export function WordLookup() {
             spelling: word,
           },
         });
+
+        setCurrentWord({
+          id: Date.now().toString(),
+          spelling: word,
+          vocId: vocData?.id,
+          definitions: (dictData?.definitions || []).slice(0, 5),
+          addedAt: new Date(),
+        });
+
+        addRecentWord({
+          id: Date.now().toString(),
+          spelling: word,
+          vocId: vocData?.id,
+          definitions: (dictData?.definitions || []).slice(0, 5),
+          addedAt: new Date(),
+        });
+
+        addLog(`查词成功: ${word}`, 'success');
       } else {
-        setError('查询失败');
-        setTimeout(() => setError(''), 2000);
+        showToast('查询失败', 'error');
+        addLog(`查询失败: ${word}`, 'error');
       }
     } catch (err) {
       console.error('Lookup failed:', err);
-      setError('查询失败');
-      setTimeout(() => setError(''), 2000);
+      showToast('查询失败', 'error');
+      addLog(`查询异常: ${err}`, 'error');
     } finally {
       setIsLoading(false);
     }
   }, [settings.maimemoToken]);
 
-  // 监听全局快捷键
   useEffect(() => {
     let lastMouseX = 400;
     let lastMouseY = 300;
@@ -142,11 +162,60 @@ export function WordLookup() {
       }
     };
 
+    const handleRefreshLookup = () => {
+      lookupWord(lastMouseX, lastMouseY);
+    };
+
+    const handleRefreshCurrentWord = async () => {
+      try {
+        const text = await getClipboardText();
+        if (text && text.trim() && /^[a-zA-Z]+$/.test(text.trim())) {
+          setCurrentWord({
+            id: Date.now().toString(),
+            spelling: text.trim(),
+            addedAt: new Date(),
+          });
+          showToast('刷新成功', 'success');
+          addLog(`刷新当前单词: ${text.trim()}`, 'info');
+        } else {
+          showToast('刷新失败: 剪贴板内容不是英文单词', 'error');
+          addLog('刷新失败: 剪贴板内容不是英文单词', 'error');
+        }
+      } catch (err) {
+        console.error('Failed to refresh current word:', err);
+        showToast('刷新失败', 'error');
+        addLog(`刷新当前单词失败: ${err}`, 'error');
+      }
+    };
+
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('keydown', handleKeyDown, true);
+    window.addEventListener('app:refresh-lookup', handleRefreshLookup);
+    window.addEventListener('app:refresh-current-word', handleRefreshCurrentWord);
+    
+    const handleAddLog = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.message) {
+        addLog(detail.message, detail.type || 'info');
+      }
+    };
+    window.addEventListener('app:add-log', handleAddLog);
+    
+    const handleShowToast = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.message) {
+        showToast(detail.message, detail.type || 'info');
+      }
+    };
+    window.addEventListener('app:show-toast', handleShowToast);
+    
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('keydown', handleKeyDown, true);
+      window.removeEventListener('app:refresh-lookup', handleRefreshLookup);
+      window.removeEventListener('app:refresh-current-word', handleRefreshCurrentWord);
+      window.removeEventListener('app:add-log', handleAddLog);
+      window.removeEventListener('app:show-toast', handleShowToast);
     };
   }, [settings.hotkey, lookupWord]);
 
@@ -162,43 +231,31 @@ export function WordLookup() {
         addedAt: new Date(),
         notepadId: selectedId,
       });
+      showToast('添加单词成功', 'success');
+      addLog(`添加单词到词本成功: ${popup.word}`, 'success');
       setPopup(prev => ({ ...prev, visible: false }));
       setShowNotepadPicker(false);
     } catch (err) {
-      setError('添加失败');
+      showToast('添加单词失败', 'error');
+      addLog(`添加单词到词本失败: ${popup.word}`, 'error');
     }
   };
 
-  if (!popup.visible && !showNotepadPicker && !error) return null;
+  if (!popup.visible && !showNotepadPicker) return null;
 
   return (
     <>
-      {/* 错误提示 */}
-      {error && (
-        <div
-          className="fixed z-50 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg"
-          style={{
-            left: '50%',
-            top: '20px',
-            transform: 'translateX(-50%)',
-          }}
-        >
-          {error}
-        </div>
-      )}
-
-      {/* 词本选择弹窗 */}
       {showNotepadPicker && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-96">
+          <div className="card p-6 w-96">
             <h3 className="text-lg font-bold mb-4">添加到词本</h3>
             <p className="text-gray-600 mb-4">
-              将 <span className="font-bold text-green-700">{popup.word}</span> 添加到：
+              将 <span className="font-bold text-ink">{popup.word}</span> 添加到：
             </p>
             <select
               value={selectedId}
               onChange={(e) => setSelectedId(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-green-500"
+              className="input mb-4"
             >
               <option value="">请选择词本</option>
               {notepads.map((notepad) => (
@@ -207,20 +264,20 @@ export function WordLookup() {
                 </option>
               ))}
             </select>
-            <div className="flex justify-end space-x-2">
+            <div className="flex justify-end gap-2">
               <button
                 onClick={() => {
                   setShowNotepadPicker(false);
                   setPopup(prev => ({ ...prev, visible: false }));
                 }}
-                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+                className="btn-text"
               >
                 取消
               </button>
               <button
                 onClick={handleConfirmAdd}
                 disabled={!selectedId || isLoading}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+                className="btn-primary"
               >
                 {isLoading ? '添加中...' : '确认添加'}
               </button>

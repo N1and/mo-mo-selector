@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
-import { useNotepadStore, useSettingsStore } from '../stores';
+import { useNotepadStore, useSettingsStore, useWordStore, useToastStore } from '../stores';
 import { getNotepads, createNotepad, deleteNotepad, updateNotepad } from '../lib/tauri';
 import { NotepadViewer } from './NotepadViewer';
 
 export function NotepadManager() {
   const { notepads, selectedNotepad, isLoading, setNotepads, setLoading, addNotepad, removeNotepad, updateNotepad: updateNotepadInStore } = useNotepadStore();
   const { settings } = useSettingsStore();
+  const { addLog } = useWordStore();
+  const showToast = useToastStore((s) => s.show);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showViewer, setShowViewer] = useState(false);
@@ -41,9 +43,13 @@ export function NotepadManager() {
       const result = await getNotepads(settings.maimemoToken);
       if (result?.data?.notepads) {
         setNotepads(result.data.notepads);
+        showToast(`加载词本列表成功: ${result.data.notepads.length} 个`, 'success');
+        addLog(`加载词本列表成功: ${result.data.notepads.length} 个`, 'success');
       }
     } catch (error) {
       console.error('Failed to load notepads:', error);
+      showToast('加载词本列表失败', 'error');
+      addLog(`加载词本列表失败: ${error}`, 'error');
     } finally {
       setLoading(false);
     }
@@ -71,6 +77,8 @@ export function NotepadManager() {
       );
       if (result?.data?.notepad) {
         addNotepad(result.data.notepad);
+        showToast('创建词本成功', 'success');
+        addLog(`创建词本成功: ${newTitle.trim()}`, 'success');
         setShowCreateModal(false);
         setNewTitle('');
         setNewBrief('');
@@ -79,6 +87,8 @@ export function NotepadManager() {
       }
     } catch (error) {
       console.error('Failed to create notepad:', error);
+      showToast('创建词本失败', 'error');
+      addLog(`创建词本失败: ${newTitle.trim()}`, 'error');
     } finally {
       setIsCreating(false);
     }
@@ -100,6 +110,8 @@ export function NotepadManager() {
       );
       if (result?.data?.notepad) {
         updateNotepadInStore(editingNotepad.id, result.data.notepad);
+        showToast('修改词本成功', 'success');
+        addLog(`修改词本成功: ${newTitle.trim()}`, 'success');
         setShowEditModal(false);
         setEditingNotepad(null);
         setNewTitle('');
@@ -109,6 +121,8 @@ export function NotepadManager() {
       }
     } catch (error) {
       console.error('Failed to update notepad:', error);
+      showToast('修改词本失败', 'error');
+      addLog(`修改词本失败: ${newTitle.trim()}`, 'error');
     } finally {
       setIsEditing(false);
     }
@@ -121,13 +135,18 @@ export function NotepadManager() {
 
     try {
       for (const id of selectedIds) {
+        const notepad = notepads.find(n => n.id === id);
         await deleteNotepad(id, settings.maimemoToken);
         removeNotepad(id);
+        showToast(`删除词本成功: ${notepad?.title || id}`, 'success');
+        addLog(`删除词本成功: ${notepad?.title || id}`, 'success');
       }
       setSelectedIds(new Set());
       setIsManageMode(false);
     } catch (error) {
       console.error('Failed to delete notepads:', error);
+      showToast('删除词本失败', 'error');
+      addLog(`删除词本失败: ${error}`, 'error');
     }
   };
 
@@ -168,27 +187,32 @@ export function NotepadManager() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">词本管理</h2>
-        <div className="flex items-center gap-2">
+      <div className="banner flex items-center justify-between">
+        <div>
+          <h2 className="banner-title">词本管理</h2>
+          <p className="banner-desc">管理你的词本，添加、编辑、删除词本</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="banner-info">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+            </svg>
+            {notepads.length} 个词本
+          </span>
           {notepads.length > 0 && (
             <button
               onClick={() => {
                 setIsManageMode(!isManageMode);
                 setSelectedIds(new Set());
               }}
-              className={`px-4 py-2 rounded-lg transition-colors ${
-                isManageMode
-                  ? 'bg-gray-500 text-white hover:bg-gray-600'
-                  : 'bg-orange-500 text-white hover:bg-orange-600'
-              }`}
+              className="banner-btn"
             >
               {isManageMode ? '退出管理' : '管理'}
             </button>
           )}
           <button
             onClick={() => setShowCreateModal(true)}
-            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+            className="banner-btn"
           >
             新建词本
           </button>
@@ -196,23 +220,23 @@ export function NotepadManager() {
       </div>
 
       {isManageMode && (
-        <div className="flex items-center gap-4 p-3 bg-orange-50 rounded-lg border border-orange-200">
+        <div className="flex items-center gap-4 p-3 bg-ink-50 rounded-card border border-ink-200">
           <label className="flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"
               checked={selectedIds.size === filteredNotepads.length && filteredNotepads.length > 0}
               onChange={selectAll}
-              className="w-4 h-4 text-orange-500 rounded focus:ring-orange-500"
+              className="w-4 h-4 text-ink rounded focus:ring-ink"
             />
-            <span className="text-sm font-medium">全选</span>
+            <span className="text-body font-medium">全选</span>
           </label>
-          <span className="text-sm text-gray-500">
+          <span className="text-body text-gray-500">
             已选 {selectedIds.size} / {filteredNotepads.length}
           </span>
           <button
             onClick={handleDeleteSelected}
             disabled={selectedIds.size === 0}
-            className="px-4 py-1.5 bg-red-500 text-white text-sm rounded-lg hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="btn-danger text-sm"
           >
             删除选中
           </button>
@@ -224,7 +248,7 @@ export function NotepadManager() {
           <p className="text-gray-500">加载中...</p>
         </div>
       ) : notepads.length === 0 ? (
-        <div className="text-center py-8 bg-white rounded-lg shadow">
+        <div className="card text-center py-8">
           <p className="text-gray-500">暂无词本，请创建新词本</p>
         </div>
       ) : (
@@ -233,11 +257,7 @@ export function NotepadManager() {
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => setFilterTag(null)}
-                className={`px-3 py-1 text-sm rounded-full transition-colors ${
-                  filterTag === null
-                    ? 'bg-blue-500 text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
+                className={filterTag === null ? "tag-active" : "tag"}
               >
                 全部
               </button>
@@ -245,11 +265,7 @@ export function NotepadManager() {
                 <button
                   key={tag}
                   onClick={() => setFilterTag(filterTag === tag ? null : tag)}
-                  className={`px-3 py-1 text-sm rounded-full transition-colors ${
-                    filterTag === tag
-                      ? 'bg-blue-500 text-white'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
+                  className={filterTag === tag ? "tag-active" : "tag"}
                 >
                   {tag}
                 </button>
@@ -260,11 +276,11 @@ export function NotepadManager() {
             {filteredNotepads.map((notepad) => (
             <div
               key={notepad.id}
-              className={`p-4 bg-white rounded-lg shadow cursor-pointer transition-all hover:shadow-md ${
+              className={`card cursor-pointer transition-all ${
                 selectedNotepad?.id === notepad.id && !isManageMode
-                  ? 'ring-2 ring-blue-500'
+                  ? 'card-active'
                   : ''
-              } ${selectedIds.has(notepad.id) ? 'ring-2 ring-orange-500 bg-orange-50' : ''}`}
+              } ${selectedIds.has(notepad.id) ? 'ring-2 ring-ink bg-ink-50' : ''}`}
               onClick={() => {
                 if (isManageMode) {
                   toggleSelectNotepad(notepad.id);
@@ -278,7 +294,7 @@ export function NotepadManager() {
                 <div className="flex-1 min-w-0">
                   <h3 className="font-semibold text-lg mb-2 truncate">{notepad.title}</h3>
                   {notepad.brief && (
-                    <p className="text-gray-600 text-sm mb-2 line-clamp-2">{notepad.brief}</p>
+                    <p className="text-gray-600 text-body mb-2 line-clamp-2">{notepad.brief}</p>
                   )}
                 </div>
                 {isManageMode && (
@@ -286,12 +302,12 @@ export function NotepadManager() {
                     type="checkbox"
                     checked={selectedIds.has(notepad.id)}
                     onChange={() => toggleSelectNotepad(notepad.id)}
-                    className="w-5 h-5 text-orange-500 rounded focus:ring-orange-500 ml-2"
+                    className="w-5 h-5 text-ink rounded focus:ring-ink ml-2"
                     onClick={(e) => e.stopPropagation()}
                   />
                 )}
               </div>
-              <div className="flex justify-between items-center text-sm text-gray-500">
+              <div className="flex justify-between items-center text-body text-gray-500">
                 <span>{notepad.updated_time ? new Date(notepad.updated_time).toLocaleDateString() : ''}</span>
                 {!isManageMode && (
                   <button
@@ -299,7 +315,7 @@ export function NotepadManager() {
                       e.stopPropagation();
                       openEditModal(notepad);
                     }}
-                    className="text-blue-500 hover:text-blue-700 text-sm"
+                    className="text-ink hover:text-ink-light text-body"
                   >
                     编辑
                   </button>
@@ -308,10 +324,7 @@ export function NotepadManager() {
               {notepad.tags && notepad.tags.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-1">
                   {notepad.tags.map((tag, index) => (
-                    <span
-                      key={index}
-                      className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full"
-                    >
+                    <span key={index} className="tag text-xs">
                       {tag}
                     </span>
                   ))}
@@ -325,35 +338,35 @@ export function NotepadManager() {
 
       {showCreateModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-[560px] max-h-[80vh] overflow-y-auto">
+          <div className="bg-white rounded-card p-6 w-[560px] max-h-[80vh] overflow-y-auto">
             <h3 className="text-xl font-bold mb-4">新建词本</h3>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-body font-medium text-gray-700 mb-1">
                   词本名称 *
                 </label>
                 <input
                   type="text"
                   value={newTitle}
                   onChange={(e) => setNewTitle(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="input"
                   placeholder="输入词本名称"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-body font-medium text-gray-700 mb-1">
                   描述 *
                 </label>
                 <textarea
                   value={newBrief}
                   onChange={(e) => setNewBrief(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="textarea"
                   rows={2}
                   placeholder="词本描述"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-body font-medium text-gray-700 mb-1">
                   标签
                 </label>
                 <div className="flex flex-wrap gap-2">
@@ -362,11 +375,7 @@ export function NotepadManager() {
                       key={tag}
                       type="button"
                       onClick={() => toggleTag(tag)}
-                      className={`px-3 py-1 text-sm rounded-full border transition-colors ${
-                        newTags.includes(tag)
-                          ? 'bg-blue-500 text-white border-blue-500'
-                          : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'
-                      }`}
+                      className={newTags.includes(tag) ? "tag-outline-active" : "tag-outline"}
                     >
                       {tag}
                     </button>
@@ -374,19 +383,19 @@ export function NotepadManager() {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-body font-medium text-gray-700 mb-1">
                   词本正文
                 </label>
                 <textarea
                   value={newContent}
                   onChange={(e) => setNewContent(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="textarea"
                   rows={4}
                   placeholder="每行一个单词"
                 />
               </div>
             </div>
-            <div className="flex justify-end space-x-2 mt-6">
+            <div className="flex justify-end gap-2 mt-6">
               <button
                 onClick={() => {
                   setShowCreateModal(false);
@@ -395,14 +404,14 @@ export function NotepadManager() {
                   setNewTags([]);
                   setNewContent('');
                 }}
-                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+                className="btn-text"
               >
                 取消
               </button>
               <button
                 onClick={handleCreateNotepad}
                 disabled={!newTitle.trim() || !newBrief.trim() || isCreating}
-                className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="btn-primary"
               >
                 {isCreating ? '创建中...' : '创建'}
               </button>
@@ -413,35 +422,35 @@ export function NotepadManager() {
 
       {showEditModal && editingNotepad && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-[560px] max-h-[80vh] overflow-y-auto">
+          <div className="bg-white rounded-card p-6 w-[560px] max-h-[80vh] overflow-y-auto">
             <h3 className="text-xl font-bold mb-4">编辑词本</h3>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-body font-medium text-gray-700 mb-1">
                   词本名称 *
                 </label>
                 <input
                   type="text"
                   value={newTitle}
                   onChange={(e) => setNewTitle(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="input"
                   placeholder="输入词本名称"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-body font-medium text-gray-700 mb-1">
                   描述 *
                 </label>
                 <textarea
                   value={newBrief}
                   onChange={(e) => setNewBrief(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="textarea"
                   rows={2}
                   placeholder="词本描述"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-body font-medium text-gray-700 mb-1">
                   标签
                 </label>
                 <div className="flex flex-wrap gap-2">
@@ -450,11 +459,7 @@ export function NotepadManager() {
                       key={tag}
                       type="button"
                       onClick={() => toggleTag(tag)}
-                      className={`px-3 py-1 text-sm rounded-full border transition-colors ${
-                        newTags.includes(tag)
-                          ? 'bg-blue-500 text-white border-blue-500'
-                          : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'
-                      }`}
+                      className={newTags.includes(tag) ? "tag-outline-active" : "tag-outline"}
                     >
                       {tag}
                     </button>
@@ -462,19 +467,19 @@ export function NotepadManager() {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-body font-medium text-gray-700 mb-1">
                   词本正文
                 </label>
                 <textarea
                   value={newContent}
                   onChange={(e) => setNewContent(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="textarea"
                   rows={4}
                   placeholder="每行一个单词"
                 />
               </div>
             </div>
-            <div className="flex justify-end space-x-2 mt-6">
+            <div className="flex justify-end gap-2 mt-6">
               <button
                 onClick={() => {
                   setShowEditModal(false);
@@ -484,14 +489,14 @@ export function NotepadManager() {
                   setNewTags([]);
                   setNewContent('');
                 }}
-                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+                className="btn-text"
               >
                 取消
               </button>
               <button
                 onClick={handleEditNotepad}
                 disabled={!newTitle.trim() || !newBrief.trim() || isEditing}
-                className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="btn-primary"
               >
                 {isEditing ? '保存中...' : '保存'}
               </button>

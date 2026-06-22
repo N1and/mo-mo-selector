@@ -126,7 +126,7 @@ export function NotepadViewer({ notepadId, onClose }: NotepadViewerProps) {
   if (isLoading) {
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-lg p-8">
+        <div className="card p-8">
           <p className="text-gray-500">加载中...</p>
         </div>
       </div>
@@ -135,7 +135,7 @@ export function NotepadViewer({ notepadId, onClose }: NotepadViewerProps) {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg w-[90vw] h-[85vh] flex overflow-hidden">
+      <div className="bg-white rounded-card w-[90vw] h-[85vh] flex overflow-hidden">
         {/* 左侧边栏 - 单词列表 */}
         <div className="w-64 bg-gray-50 border-r flex flex-col">
           <div className="p-4 border-b bg-white">
@@ -149,9 +149,9 @@ export function NotepadViewer({ notepadId, onClose }: NotepadViewerProps) {
               </button>
             </div>
             {notepad?.brief && (
-              <p className="text-sm text-gray-500 truncate">{notepad.brief}</p>
+              <p className="text-body text-gray-500 truncate">{notepad.brief}</p>
             )}
-            <p className="text-xs text-gray-400 mt-1">{words.length} 个单词</p>
+            <p className="text-caption text-gray-400 mt-1">{words.length} 个单词</p>
           </div>
           
           <div className="flex-1 overflow-y-auto">
@@ -161,7 +161,7 @@ export function NotepadViewer({ notepadId, onClose }: NotepadViewerProps) {
                 onClick={() => setSelectedIndex(index)}
                 className={`w-full text-left px-4 py-3 border-b border-gray-100 transition-colors ${
                   selectedIndex === index
-                    ? 'bg-blue-500 text-white'
+                    ? 'bg-ink text-white'
                     : 'hover:bg-gray-100'
                 }`}
               >
@@ -187,14 +187,14 @@ export function NotepadViewer({ notepadId, onClose }: NotepadViewerProps) {
                   <h2 className="text-3xl font-bold text-gray-800">{currentWord.spelling}</h2>
                   <div className="flex items-center gap-2">
                     {addMessage && (
-                      <span className={`text-sm ${addMessage.includes('失败') ? 'text-red-500' : 'text-green-500'}`}>
+                      <span className={`text-body ${addMessage.includes('失败') ? 'text-error' : 'text-success'}`}>
                         {addMessage}
                       </span>
                     )}
                     <button
                       onClick={handleAddToStudy}
                       disabled={isAdding || !currentWord.voc_id}
-                      className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                      className="btn-primary text-sm"
                     >
                       {isAdding ? '添加中...' : '加入学习'}
                     </button>
@@ -217,7 +217,7 @@ export function NotepadViewer({ notepadId, onClose }: NotepadViewerProps) {
                 {dictData?.word_forms && dictData.word_forms.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-2">
                     {dictData.word_forms.map((wf, idx) => (
-                      <span key={idx} className="text-sm text-gray-500">
+                      <span key={idx} className="text-body text-gray-500">
                         {wf.form}: <span className="text-gray-700">{wf.value}</span>
                       </span>
                     ))}
@@ -228,10 +228,10 @@ export function NotepadViewer({ notepadId, onClose }: NotepadViewerProps) {
               {/* 词典释义 */}
               {dictData?.definitions && dictData.definitions.length > 0 && (
                 <div className="mb-6">
-                  <h4 className="text-sm font-semibold text-gray-500 uppercase mb-3">释义</h4>
+                  <h4 className="text-body font-semibold text-gray-500 uppercase mb-3">释义</h4>
                   <div className="space-y-2">
                     {dictData.definitions.map((def, idx) => (
-                      <div key={idx} className="p-3 bg-gray-50 rounded-lg">
+                      <div key={idx} className="p-3 bg-gray-50 rounded-card">
                         <p className="text-gray-800">{def}</p>
                       </div>
                     ))}
@@ -242,12 +242,12 @@ export function NotepadViewer({ notepadId, onClose }: NotepadViewerProps) {
               {/* 例句 */}
               {dictData?.examples && dictData.examples.length > 0 && (
                 <div className="mb-6">
-                  <h4 className="text-sm font-semibold text-gray-500 uppercase mb-3">例句</h4>
+                  <h4 className="text-body font-semibold text-gray-500 uppercase mb-3">例句</h4>
                   <div className="space-y-3">
                     {dictData.examples.map((ex, idx) => (
-                      <div key={idx} className="p-3 bg-green-50 rounded-lg">
+                      <div key={idx} className="p-3 bg-ink-50 rounded-card">
                         <p className="text-gray-800 font-medium">{ex.sentence}</p>
-                        <p className="text-gray-600 text-sm mt-1">{ex.translation}</p>
+                        <p className="text-gray-600 text-body mt-1">{ex.translation}</p>
                       </div>
                     ))}
                   </div>
@@ -257,17 +257,17 @@ export function NotepadViewer({ notepadId, onClose }: NotepadViewerProps) {
               {/* 加载提示 */}
               {isLoadingDict && (
                 <div className="text-center py-4">
-                  <p className="text-gray-400 text-sm">加载词典数据中...</p>
+                  <p className="text-gray-400 text-body">加载词典数据中...</p>
                 </div>
               )}
 
               {/* 墨墨自定义内容 */}
               {currentWord.interpretations.length > 0 && (
                 <div className="mb-6">
-                  <h4 className="text-sm font-semibold text-gray-500 uppercase mb-3">我的释义</h4>
+                  <h4 className="text-body font-semibold text-gray-500 uppercase mb-3">我的释义</h4>
                   <div className="space-y-2">
                     {currentWord.interpretations.map((interp: any, idx: number) => (
-                      <div key={idx} className="p-3 bg-blue-50 rounded-lg">
+                      <div key={idx} className="p-3 bg-ink-50 rounded-card">
                         <p className="text-gray-800">{interp.interpretation}</p>
                       </div>
                     ))}
@@ -277,11 +277,11 @@ export function NotepadViewer({ notepadId, onClose }: NotepadViewerProps) {
 
               {currentWord.notes.length > 0 && (
                 <div className="mb-6">
-                  <h4 className="text-sm font-semibold text-gray-500 uppercase mb-3">我的助记</h4>
+                  <h4 className="text-body font-semibold text-gray-500 uppercase mb-3">我的助记</h4>
                   <div className="space-y-2">
                     {currentWord.notes.map((note: any, idx: number) => (
-                      <div key={idx} className="p-3 bg-yellow-50 rounded-lg">
-                        <span className="text-yellow-700 font-medium text-sm mr-2">[{note.note_type}]</span>
+                      <div key={idx} className="p-3 bg-warning/10 rounded-card">
+                        <span className="text-warning font-medium text-body mr-2">[{note.note_type}]</span>
                         <span className="text-gray-800">{note.note}</span>
                       </div>
                     ))}
@@ -291,12 +291,12 @@ export function NotepadViewer({ notepadId, onClose }: NotepadViewerProps) {
 
               {currentWord.phrases.length > 0 && (
                 <div className="mb-6">
-                  <h4 className="text-sm font-semibold text-gray-500 uppercase mb-3">我的例句</h4>
+                  <h4 className="text-body font-semibold text-gray-500 uppercase mb-3">我的例句</h4>
                   <div className="space-y-3">
                     {currentWord.phrases.map((phrase: any, idx: number) => (
-                      <div key={idx} className="p-3 bg-purple-50 rounded-lg">
+                      <div key={idx} className="p-3 bg-ink-100 rounded-card">
                         <p className="text-gray-800 font-medium">{phrase.phrase}</p>
-                        <p className="text-gray-600 text-sm mt-1">{phrase.interpretation}</p>
+                        <p className="text-gray-600 text-body mt-1">{phrase.interpretation}</p>
                       </div>
                     ))}
                   </div>
@@ -308,17 +308,17 @@ export function NotepadViewer({ notepadId, onClose }: NotepadViewerProps) {
                 <button
                   onClick={() => setSelectedIndex(Math.max(0, selectedIndex - 1))}
                   disabled={selectedIndex === 0}
-                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="btn-text"
                 >
                   ← 上一个
                 </button>
-                <span className="text-gray-500 text-sm self-center">
+                <span className="text-gray-500 text-body self-center">
                   {selectedIndex + 1} / {words.length}
                 </span>
                 <button
                   onClick={() => setSelectedIndex(Math.min(words.length - 1, selectedIndex + 1))}
                   disabled={selectedIndex === words.length - 1}
-                  className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="btn-primary"
                 >
                   下一个 →
                 </button>

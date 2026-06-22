@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "mo-mo-selector",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "identifier": "com.tauri-app.mo-mo-selector",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -12,8 +12,9 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "mo-mo-selector",
-        "width": 800,
+        "width": 900,
         "height": 600
       }
     ],

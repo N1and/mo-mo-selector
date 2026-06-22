@@ -37,12 +37,12 @@
 **负责的事**：
 - 展示当前单词和音标
 - 展示有道词典释义
+- 展示例句
 - 提供"加入学习"按钮
 - 提供"添加到词本"按钮（可选词本）
 - 点击窗口外部或按 Escape 自动关闭
 
 **不负责的事**：
-- 大量例句
 - 复杂词源分析
 - 历史记录浏览
 - 词本管理
@@ -53,9 +53,8 @@
 **定位**：用户主动打开应用时看到的完整界面
 
 **负责的事**：
-- 查看词本列表和词本详情
+- 查看今日查询记录
 - 管理词本（创建、编辑、删除）
-- 查看单词释义、助记、例句
 - 将单词加入学习或词本
 - 配置快捷键和墨墨账号授权
 
@@ -73,9 +72,11 @@ graph TB
     subgraph Frontend["React 前端 (UI)"]
         WordLookup["快捷键查词"]
         PopupWindow["弹窗窗口"]
+        TodayWords["今日查询"]
         NotepadManager["词本管理"]
         NotepadViewer["词本详情"]
         Settings["设置"]
+        Monitor["划词监控"]
         Zustand["Zustand 状态管理"]
     end
 
@@ -104,8 +105,9 @@ graph TB
 3. 并行请求墨墨 API（获取 `voc_id`）和有道词典 API（获取释义）
 4. Rust 后端创建独立弹窗窗口，位于鼠标光标位置
 5. 通过 URL 参数传递单词数据给弹窗
-6. 弹窗显示单词、音标、释义
+6. 弹窗显示单词、音标、释义、例句
 7. 用户可点击"加入学习"或"添加到词本"
+8. 查询记录保存到本地，显示在今日查询页面
 
 #### 词本管理流程
 
@@ -172,6 +174,8 @@ mo-mo-selector/
 │   ├── components/
 │   │   ├── WordLookup.tsx      # 快捷键查词 + 词本选择弹窗
 │   │   ├── PopupWindow.tsx     # 独立弹窗窗口组件
+│   │   ├── Monitor.tsx         # 划词监控页面
+│   │   ├── TodayWords.tsx      # 今日查询页面
 │   │   ├── NotepadManager.tsx  # 词本管理（列表、创建、编辑、删除）
 │   │   ├── NotepadViewer.tsx   # 词本详情（单词列表 + 释义查看）
 │   │   ├── Settings.tsx        # 设置页面
@@ -187,7 +191,7 @@ mo-mo-selector/
 │   └── App.tsx
 ├── src-tauri/                  # Rust 后端
 │   └── src/
-│       └── lib.rs              # Tauri 命令定义（17 个命令）
+│       └── lib.rs              # Tauri 命令定义
 ├── docs/                       # 文档
 │   ├── API.md                  # API 文档
 │   ├── DESIGN.md               # 设计文档
