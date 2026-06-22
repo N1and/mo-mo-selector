@@ -4,7 +4,9 @@ use std::fs;
 use std::path::PathBuf;
 use tauri::Manager;
 
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct Settings {
     #[serde(default)]
     pub maimemo_token: String,
@@ -62,6 +64,57 @@ fn save_settings(app: tauri::AppHandle, settings: Settings) -> Result<(), String
 }
 
 #[tauri::command]
+async fn show_popup_window(app: tauri::AppHandle, x: f64, y: f64, word: String, definitions: Vec<String>, phonetic: String, uk_phonetic: String, voc_id: String, token: String) -> Result<(), String> {
+    use tauri::WebviewUrl;
+    use tauri::WebviewWindowBuilder;
+    
+    // 如果已存在popup窗口，先关闭
+    if let Some(window) = app.get_webview_window("popup") {
+        let _ = window.close();
+    }
+    
+    let popup_width = 400.0;
+    let popup_height = 350.0;
+    
+    let defs_json = serde_json::to_string(&definitions).unwrap_or_default();
+    let encoded_word = urlencoding::encode(&word);
+    let encoded_defs = urlencoding::encode(&defs_json);
+    let encoded_phonetic = urlencoding::encode(&phonetic);
+    let encoded_uk = urlencoding::encode(&uk_phonetic);
+    let encoded_voc_id = urlencoding::encode(&voc_id);
+    let encoded_token = urlencoding::encode(&token);
+    let url = format!(
+        "index.html#/popup?word={}&definitions={}&phonetic={}&uk_phonetic={}&voc_id={}&token={}",
+        encoded_word, encoded_defs, encoded_phonetic, encoded_uk, encoded_voc_id, encoded_token
+    );
+    
+    WebviewWindowBuilder::new(
+        &app,
+        "popup",
+        WebviewUrl::App(url.into()),
+    )
+    .title(&word)
+    .inner_size(popup_width, popup_height)
+    .position(x, y)
+    .decorations(false)
+    .resizable(false)
+    .always_on_top(true)
+    .skip_taskbar(true)
+    .build()
+    .map_err(|e| e.to_string())?;
+    
+    Ok(())
+}
+
+#[tauri::command]
+async fn close_popup_window(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("popup") {
+        let _ = window.close();
+    }
+    Ok(())
+}
+
+#[tauri::command]
 async fn get_clipboard_text(app: tauri::AppHandle) -> Result<String, String> {
     use tauri_plugin_clipboard_manager::ClipboardExt;
     app.clipboard().read_text().map_err(|e| e.to_string())
@@ -77,36 +130,170 @@ async fn check_vocabulary(spelling: String, token: String) -> Result<serde_json:
         .await
         .map_err(|e| e.to_string())?;
     
-    response.json::<serde_json::Value>().await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn get_notepads(token: String) -> Result<serde_json::Value, String> {
-    let client = reqwest::Client::new();
-    let response = client
-        .get("https://open.maimemo.com/open/api/v1/notepads")
-        .header("Authorization", format!("Bearer {}", token))
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
+    let data: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
     
-    response.json::<serde_json::Value>().await.map_err(|e| e.to_string())
+    // API 响应包裹在 data 字段中
+    let result = data.get("data").unwrap_or(&data);
+    Ok(serde_json::json!({ "data": result }))
 }
 
 #[tauri::command]
-async fn add_words_to_notepad(notepad_id: String, voc_ids: Vec<String>, token: String) -> Result<serde_json::Value, String> {
+async fn create_notepad(title: String, brief: String, tags: Vec<String>, content: String, token: String) -> Result<serde_json::Value, String> {
     let client = reqwest::Client::new();
-    let body = serde_json::json!({ "voc_ids": voc_ids });
+    let notepad = serde_json::json!({
+        "title": title,
+        "brief": brief,
+        "tags": tags,
+        "content": content,
+        "status": "UNPUBLISHED"
+    });
+    let body = serde_json::json!({ "notepad": notepad });
     let response = client
-        .post(format!("https://open.maimemo.com/open/api/v1/notepads/{}/words", notepad_id))
+        .post("https://open.maimemo.com/open/api/v1/notepads")
         .header("Authorization", format!("Bearer {}", token))
         .header("Content-Type", "application/json")
         .json(&body)
         .send()
         .await
         .map_err(|e| e.to_string())?;
+
+    let data: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
     
-    response.json::<serde_json::Value>().await.map_err(|e| e.to_string())
+    // API 响应包裹在 data 字段中
+    let result = data.get("data").unwrap_or(&data);
+    Ok(serde_json::json!({ "data": result }))
+}
+
+#[tauri::command]
+async fn get_notepads(token: String) -> Result<serde_json::Value, String> {
+    let client = reqwest::Client::new();
+    let auth_header = format!("Bearer {}", token);
+    let mut all_notepads = Vec::new();
+    let mut offset = 0;
+    let limit = 10;
+    
+    loop {
+        let url = format!("https://open.maimemo.com/open/api/v1/notepads?limit={}&offset={}", limit, offset);
+        let response = client
+            .get(&url)
+            .header("Authorization", &auth_header)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+        
+        let data: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
+        
+        // API 响应可能包裹在 data 字段中
+        let notepads_data = data.get("data").unwrap_or(&data);
+        
+        if let Some(notepads) = notepads_data["notepads"].as_array() {
+            if notepads.is_empty() {
+                break;
+            }
+            all_notepads.extend(notepads.iter().cloned());
+            if (notepads.len() as i64) < limit {
+                break;
+            }
+            offset += limit;
+        } else {
+            break;
+        }
+    }
+    
+    Ok(serde_json::json!({ "data": { "notepads": all_notepads } }))
+}
+
+#[tauri::command]
+async fn add_words_to_notepad(notepad_id: String, voc_ids: Vec<String>, token: String) -> Result<serde_json::Value, String> {
+    let client = reqwest::Client::new();
+    let auth_header = format!("Bearer {}", token);
+    
+    // 1. 获取词本详情
+    let notepad_url = format!("https://open.maimemo.com/open/api/v1/notepads/{}", notepad_id);
+    let notepad_resp = client
+        .get(&notepad_url)
+        .header("Authorization", &auth_header)
+        .send()
+        .await
+        .map_err(|e| format!("获取词本失败: {}", e))?;
+    
+    let notepad_data: serde_json::Value = notepad_resp.json().await.map_err(|e| format!("解析词本数据失败: {}", e))?;
+    let notepad_inner = notepad_data.get("data").unwrap_or(&notepad_data);
+    let current_content = notepad_inner["notepad"]["content"].as_str().unwrap_or("");
+    let title = notepad_inner["notepad"]["title"].as_str().unwrap_or("未命名词本");
+    let brief = notepad_inner["notepad"]["brief"].as_str().unwrap_or("");
+    let status = notepad_inner["notepad"]["status"].as_str().unwrap_or("UNPUBLISHED");
+    let tags: Vec<String> = notepad_inner["notepad"]["tags"]
+        .as_array()
+        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect())
+        .unwrap_or_default();
+    
+    // 2. 获取每个单词的拼写
+    let mut new_spellings = Vec::new();
+    for voc_id in &voc_ids {
+        let voc_url = format!("https://open.maimemo.com/open/api/v1/vocabulary/query");
+        let body = serde_json::json!({ "ids": [voc_id] });
+        let voc_resp = client
+            .post(&voc_url)
+            .header("Authorization", &auth_header)
+            .header("Content-Type", "application/json")
+            .json(&body)
+            .send()
+            .await;
+        
+        if let Ok(resp) = voc_resp {
+            if let Ok(voc_data) = resp.json::<serde_json::Value>().await {
+                let voc_inner = voc_data.get("data").unwrap_or(&voc_data);
+                if let Some(voc) = voc_inner["voc"].as_array().and_then(|arr| arr.first()) {
+                    if let Some(spelling) = voc["spelling"].as_str() {
+                        new_spellings.push(spelling.to_string());
+                    }
+                }
+            }
+        }
+    }
+    
+    // 3. 将新单词追加到 content
+    let mut words: Vec<&str> = current_content.lines().filter(|l| !l.trim().is_empty()).collect();
+    let mut added_count = 0;
+    for spelling in &new_spellings {
+        if !words.contains(&spelling.as_str()) {
+            words.push(spelling);
+            added_count += 1;
+        }
+    }
+    let new_content = words.join("\n");
+    
+    // 4. 更新词本
+    let update_body = serde_json::json!({
+        "notepad": {
+            "title": title,
+            "brief": brief,
+            "tags": tags,
+            "content": new_content,
+            "status": status
+        }
+    });
+    
+    let update_resp = client
+        .post(&notepad_url)
+        .header("Authorization", &auth_header)
+        .header("Content-Type", "application/json")
+        .json(&update_body)
+        .send()
+        .await
+        .map_err(|e| format!("更新词本失败: {}", e))?;
+    
+    let result = update_resp.json::<serde_json::Value>().await.map_err(|e| format!("解析更新结果失败: {}", e))?;
+    let result_inner = result.get("data").unwrap_or(&result);
+    
+    Ok(serde_json::json!({
+        "data": {
+            "success": true,
+            "added_count": added_count,
+            "notepad": result_inner["notepad"]
+        }
+    }))
 }
 
 #[tauri::command]
@@ -136,6 +323,247 @@ fn get_cursor_position() -> Result<serde_json::Value, String> {
     }
 }
 
+#[tauri::command]
+async fn delete_notepad(notepad_id: String, token: String) -> Result<serde_json::Value, String> {
+    let client = reqwest::Client::new();
+    let url = format!("https://open.maimemo.com/open/api/v1/notepads/{}", notepad_id);
+    let _response = client
+        .delete(&url)
+        .header("Authorization", format!("Bearer {}", token))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    
+    Ok(serde_json::json!({ "data": { "success": true } }))
+}
+
+#[tauri::command]
+async fn get_notepad_detail(notepad_id: String, token: String) -> Result<serde_json::Value, String> {
+    let client = reqwest::Client::new();
+    let url = format!("https://open.maimemo.com/open/api/v1/notepads/{}", notepad_id);
+    let response = client
+        .get(&url)
+        .header("Authorization", format!("Bearer {}", token))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    
+    let data: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
+    let result = data.get("data").unwrap_or(&data);
+    Ok(serde_json::json!({ "data": result }))
+}
+
+#[tauri::command]
+async fn get_word_details(spellings: Vec<String>, token: String) -> Result<serde_json::Value, String> {
+    let client = reqwest::Client::new();
+    let auth_header = format!("Bearer {}", token);
+    let mut words_details = Vec::new();
+    
+    for spelling in &spellings {
+        // 1. 获取单词ID
+        let voc_url = format!("https://open.maimemo.com/open/api/v1/vocabulary?spelling={}", spelling);
+        let voc_resp = client
+            .get(&voc_url)
+            .header("Authorization", &auth_header)
+            .send()
+            .await;
+        
+        let voc_id = if let Ok(resp) = voc_resp {
+            if let Ok(voc_data) = resp.json::<serde_json::Value>().await {
+                let voc_inner = voc_data.get("data").unwrap_or(&voc_data);
+                voc_inner["voc"]["id"].as_str().map(|s| s.to_string())
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        
+        let voc_id = match voc_id {
+            Some(id) => id,
+            None => continue,
+        };
+        
+        // 2. 获取释义
+        let interp_url = format!("https://open.maimemo.com/open/api/v1/interpretations?voc_id={}", voc_id);
+        let interpretations = if let Ok(resp) = client.get(&interp_url).header("Authorization", &auth_header).send().await {
+            if let Ok(data) = resp.json::<serde_json::Value>().await {
+                let inner = data.get("data").unwrap_or(&data);
+                inner["interpretations"].as_array().cloned().unwrap_or_default()
+            } else {
+                vec![]
+            }
+        } else {
+            vec![]
+        };
+        
+        // 3. 获取助记
+        let notes_url = format!("https://open.maimemo.com/open/api/v1/notes?voc_id={}", voc_id);
+        let notes = if let Ok(resp) = client.get(&notes_url).header("Authorization", &auth_header).send().await {
+            if let Ok(data) = resp.json::<serde_json::Value>().await {
+                let inner = data.get("data").unwrap_or(&data);
+                inner["notes"].as_array().cloned().unwrap_or_default()
+            } else {
+                vec![]
+            }
+        } else {
+            vec![]
+        };
+        
+        // 4. 获取例句
+        let phrases_url = format!("https://open.maimemo.com/open/api/v1/phrases?voc_id={}", voc_id);
+        let phrases = if let Ok(resp) = client.get(&phrases_url).header("Authorization", &auth_header).send().await {
+            if let Ok(data) = resp.json::<serde_json::Value>().await {
+                let inner = data.get("data").unwrap_or(&data);
+                inner["phrases"].as_array().cloned().unwrap_or_default()
+            } else {
+                vec![]
+            }
+        } else {
+            vec![]
+        };
+        
+        words_details.push(serde_json::json!({
+            "spelling": spelling,
+            "voc_id": voc_id,
+            "interpretations": interpretations,
+            "notes": notes,
+            "phrases": phrases
+        }));
+    }
+    
+    Ok(serde_json::json!({ "data": { "words": words_details } }))
+}
+
+#[tauri::command]
+async fn add_words_to_study(voc_ids: Vec<String>, advance: bool, token: String) -> Result<serde_json::Value, String> {
+    let client = reqwest::Client::new();
+    let url = "https://open.maimemo.com/open/api/v1/study/add_words";
+    
+    let words: Vec<serde_json::Value> = voc_ids.iter().map(|id| {
+        serde_json::json!({ "id": id })
+    }).collect();
+    
+    let body = serde_json::json!({
+        "words": words,
+        "advance": advance
+    });
+    
+    let response = client
+        .post(url)
+        .header("Authorization", format!("Bearer {}", token))
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    
+    let data: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
+    let result = data.get("data").unwrap_or(&data);
+    Ok(serde_json::json!({ "data": result }))
+}
+
+#[tauri::command]
+async fn lookup_dictionary(word: String) -> Result<serde_json::Value, String> {
+    let client = reqwest::Client::new();
+    
+    // 使用有道词典API
+    let url = format!("https://dict.youdao.com/jsonapi?q={}", word);
+    let response = client
+        .get(&url)
+        .header("User-Agent", "Mozilla/5.0")
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    
+    let data: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
+    
+    // 提取音标
+    let phonetic = data["ec"]["word"][0]["usphone"].as_str().unwrap_or("");
+    let uk_phonetic = data["ec"]["word"][0]["ukphone"].as_str().unwrap_or("");
+    
+    // 提取释义
+    let mut definitions = Vec::new();
+    if let Some(trs) = data["ec"]["word"][0]["trs"].as_array() {
+        for tr in trs {
+            if let Some(tr_item) = tr["tr"].as_array() {
+                for item in tr_item {
+                    if let Some(l) = item["l"]["i"].as_array() {
+                        let meaning: Vec<&str> = l.iter().filter_map(|v| v.as_str()).collect();
+                        if !meaning.is_empty() {
+                            definitions.push(meaning.join(" "));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // 提取例句
+    let mut examples = Vec::new();
+    if let Some(sent) = data["blng_sents_part"]["sentence-pair"].as_array() {
+        for s in sent.iter().take(3) {
+            examples.push(serde_json::json!({
+                "sentence": s["sentence"].as_str().unwrap_or(""),
+                "translation": s["sentence-translation"].as_str().unwrap_or("")
+            }));
+        }
+    }
+    
+    // 提取词形变化
+    let mut word_forms = Vec::new();
+    if let Some(wfs) = data["ec"]["word"][0]["wfs"].as_array() {
+        for wf in wfs {
+            if let Some(wf_item) = wf["wf"].as_object() {
+                if let (Some(name), Some(value)) = (wf_item.get("name"), wf_item.get("value")) {
+                    word_forms.push(serde_json::json!({
+                        "form": name.as_str().unwrap_or(""),
+                        "value": value.as_str().unwrap_or("")
+                    }));
+                }
+            }
+        }
+    }
+    
+    Ok(serde_json::json!({
+        "data": {
+            "word": word,
+            "phonetic": phonetic,
+            "uk_phonetic": uk_phonetic,
+            "definitions": definitions,
+            "examples": examples,
+            "word_forms": word_forms
+        }
+    }))
+}
+
+#[tauri::command]
+async fn update_notepad(notepad_id: String, title: String, brief: String, tags: Vec<String>, content: String, token: String) -> Result<serde_json::Value, String> {
+    let client = reqwest::Client::new();
+    let url = format!("https://open.maimemo.com/open/api/v1/notepads/{}", notepad_id);
+    let body = serde_json::json!({
+        "notepad": {
+            "title": title,
+            "brief": brief,
+            "tags": tags,
+            "content": content,
+            "status": "UNPUBLISHED"
+        }
+    });
+    let response = client
+        .post(&url)
+        .header("Authorization", format!("Bearer {}", token))
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    
+    let data: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
+    let result = data.get("data").unwrap_or(&data);
+    Ok(serde_json::json!({ "data": result }))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -145,10 +573,19 @@ pub fn run() {
             greet,
             load_settings,
             save_settings,
+            show_popup_window,
+            close_popup_window,
             get_clipboard_text,
             check_vocabulary,
+            create_notepad,
             get_notepads,
             add_words_to_notepad,
+            delete_notepad,
+            update_notepad,
+            get_notepad_detail,
+            get_word_details,
+            add_words_to_study,
+            lookup_dictionary,
             get_cursor_position
         ])
         .run(tauri::generate_context!())

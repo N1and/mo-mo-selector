@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { invoke } from '@tauri-apps/api/core';
+import { loadSettings as loadSettingsCmd, saveSettings as saveSettingsCmd } from '../lib/tauri';
 
 interface Settings {
   maimemoToken: string;
@@ -32,7 +32,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     })),
   loadSettings: async () => {
     try {
-      const settings = await invoke<Settings>('load_settings');
+      const settings = await loadSettingsCmd();
       set({ settings: { ...defaultSettings, ...settings }, isLoaded: true });
     } catch (error) {
       console.error('Failed to load settings:', error);
@@ -42,7 +42,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   saveSettings: async () => {
     try {
       const { settings } = get();
-      await invoke('save_settings', { settings });
+      await saveSettingsCmd(settings);
     } catch (error) {
       console.error('Failed to save settings:', error);
     }

@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useSettingsStore, useNotepadStore } from '../stores';
+import { useToastStore } from '../stores/toastStore';
 import { HotkeyPicker } from './HotkeyPicker';
 
 export function Settings() {
-  const { settings, isLoaded, updateSettings, loadSettings, saveSettings } = useSettingsStore();
+  const { settings, isLoaded, updateSettings, saveSettings } = useSettingsStore();
   const { notepads, setNotepads, setSelectedNotepad } = useNotepadStore();
   const [isSaving, setIsSaving] = useState(false);
+  const showToast = useToastStore((s) => s.show);
 
   useEffect(() => {
     if (isLoaded && settings.maimemoToken && notepads.length === 0) {
@@ -17,10 +19,10 @@ export function Settings() {
     try {
       if (!settings.maimemoToken) return;
       const result = await import('../lib/tauri').then(m => m.getNotepads(settings.maimemoToken));
-      if (result?.data) {
-        setNotepads(result.data);
+      if (result?.data?.notepads) {
+        setNotepads(result.data.notepads);
         if (settings.selectedNotepadId) {
-          const selected = result.data.find((n: any) => n.id === settings.selectedNotepadId);
+          const selected = result.data.notepads.find((n: any) => n.id === settings.selectedNotepadId);
           if (selected) setSelectedNotepad(selected);
         }
       }
@@ -36,9 +38,9 @@ export function Settings() {
       if (settings.maimemoToken) {
         await loadNotepads();
       }
-      alert('设置已保存');
+      showToast('设置已保存', 'success');
     } catch (error) {
-      alert('保存失败');
+      showToast('保存失败', 'error');
     } finally {
       setIsSaving(false);
     }
@@ -84,7 +86,7 @@ export function Settings() {
                 <option value="">请选择词本</option>
                 {notepads.map((notepad) => (
                   <option key={notepad.id} value={notepad.id}>
-                    {notepad.title} ({notepad.wordCount} 个单词)
+                    {notepad.title}
                   </option>
                 ))}
               </select>

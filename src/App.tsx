@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Monitor, NotepadManager, Settings, WordLookup } from "./components";
+import { Monitor, NotepadManager, Settings, WordLookup, Toast } from "./components";
 import { useSettingsStore } from "./stores";
 import "./App.css";
 
@@ -13,6 +13,9 @@ function App() {
 
   return (
     <div className="flex h-screen bg-gray-100">
+      {/* 全局提示 */}
+      <Toast />
+
       {/* 全局快捷键弹窗 */}
       <WordLookup />
 

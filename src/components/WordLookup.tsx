@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { getClipboardText, checkVocabulary, addWordsToNotepad } from '../lib/tauri';
+import { useState, useEffect, useCallback } from 'react';
+import { getClipboardText, checkVocabulary, addWordsToNotepad, lookupDictionary, showPopupWindow } from '../lib/tauri';
 import { useSettingsStore, useNotepadStore, useWordStore } from '../stores';
 
 interface WordPopup {
@@ -12,7 +12,7 @@ interface WordPopup {
 
 export function WordLookup() {
   const { settings } = useSettingsStore();
-  const { notepads, selectedNotepad } = useNotepadStore();
+  const { notepads } = useNotepadStore();
   const { addRecentWord } = useWordStore();
   
   const [popup, setPopup] = useState<WordPopup>({
@@ -24,14 +24,11 @@ export function WordLookup() {
   });
   
   const [showNotepadPicker, setShowNotepadPicker] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
   const [selectedId, setSelectedId] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  
-  const popupRef = useRef<HTMLDivElement>(null);
 
-  const lookupWord = useCallback(async () => {
+  const lookupWord = useCallback(async (mouseX?: number, mouseY?: number) => {
     if (!settings.maimemoToken) {
       setError('请先配置 API Token');
       return;
@@ -39,29 +36,68 @@ export function WordLookup() {
 
     try {
       const text = await getClipboardText();
-      if (!text || !/^[a-zA-Z]+$/.test(text)) {
+      console.log('Clipboard text:', text);
+      
+      if (!text || !text.trim()) {
+        setError('剪贴板为空');
+        setTimeout(() => setError(''), 2000);
+        return;
+      }
+      
+      const word = text.trim();
+      if (!/^[a-zA-Z]+$/.test(word)) {
+        setError('剪贴板内容不是英文单词');
+        setTimeout(() => setError(''), 2000);
         return;
       }
 
       setIsLoading(true);
       setError('');
       
-      const result = await checkVocabulary(text, settings.maimemoToken);
+      const [vocabResult, dictResult] = await Promise.all([
+        checkVocabulary(word, settings.maimemoToken).catch(() => null),
+        lookupDictionary(word).catch(() => null)
+      ]);
       
-      if (result?.data) {
-        // 获取鼠标位置
-        const x = await import('@tauri-apps/api/core').then(m => m.invoke('get_cursor_position')).catch(() => ({ x: 400, y: 300 }));
+      console.log('Vocabulary result:', vocabResult);
+      console.log('Dictionary result:', dictResult);
+      
+      const vocData = vocabResult?.data?.voc;
+      const dictData = dictResult?.data;
+      
+      if (vocData || dictData) {
+        const x = mouseX ?? 400;
+        const y = mouseY ?? 300;
+        
+        await showPopupWindow(
+          x,
+          y,
+          word,
+          dictData?.definitions || [],
+          dictData?.phonetic || '',
+          dictData?.uk_phonetic || '',
+          vocData?.id || '',
+          settings.maimemoToken
+        );
         
         setPopup({
           visible: true,
-          x: (x as any).x || 400,
-          y: (x as any).y || 300,
-          word: text,
-          data: result.data,
+          x: x,
+          y: y,
+          word: word,
+          data: {
+            id: vocData?.id,
+            spelling: word,
+          },
         });
+      } else {
+        setError('查询失败');
+        setTimeout(() => setError(''), 2000);
       }
     } catch (err) {
       console.error('Lookup failed:', err);
+      setError('查询失败');
+      setTimeout(() => setError(''), 2000);
     } finally {
       setIsLoading(false);
     }
@@ -69,6 +105,14 @@ export function WordLookup() {
 
   // 监听全局快捷键
   useEffect(() => {
+    let lastMouseX = 400;
+    let lastMouseY = 300;
+    
+    const handleMouseMove = (e: MouseEvent) => {
+      lastMouseX = e.clientX;
+      lastMouseY = e.clientY;
+    };
+    
     const handleKeyDown = (e: KeyboardEvent) => {
       const hotkey = settings.hotkey.toLowerCase();
       const parts = hotkey.split('+').map(p => p.trim());
@@ -78,43 +122,33 @@ export function WordLookup() {
       const needAlt = parts.includes('alt');
       const key = parts.find(p => !['ctrl', 'shift', 'alt', 'meta'].includes(p));
       
-      if (
-        e.ctrlKey === needCtrl &&
-        e.shiftKey === needShift &&
-        e.altKey === needAlt &&
-        e.key.toLowerCase() === key?.toLowerCase()
-      ) {
+      const ctrlMatch = e.ctrlKey === needCtrl;
+      const shiftMatch = e.shiftKey === needShift;
+      const altMatch = e.altKey === needAlt;
+      const keyMatch = e.key.toLowerCase() === key?.toLowerCase();
+      
+      console.log('Hotkey check:', {
+        hotkey,
+        needCtrl, needShift, needAlt, key,
+        actualCtrl: e.ctrlKey, actualShift: e.shiftKey, actualAlt: e.altKey, actualKey: e.key,
+        ctrlMatch, shiftMatch, altMatch, keyMatch
+      });
+      
+      if (ctrlMatch && shiftMatch && altMatch && keyMatch) {
         e.preventDefault();
-        lookupWord();
+        e.stopPropagation();
+        console.log('Hotkey matched, calling lookupWord at', lastMouseX, lastMouseY);
+        lookupWord(lastMouseX, lastMouseY);
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('keydown', handleKeyDown, true);
+    };
   }, [settings.hotkey, lookupWord]);
-
-  // 点击外部关闭弹窗
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (popupRef.current && !popupRef.current.contains(e.target as Node)) {
-        setPopup(prev => ({ ...prev, visible: false }));
-        setShowNotepadPicker(false);
-        setShowConfirm(false);
-      }
-    };
-
-    if (popup.visible) {
-      window.addEventListener('mousedown', handleClickOutside);
-      return () => window.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [popup.visible]);
-
-  const handleAddToNotepad = () => {
-    if (selectedNotepad) {
-      setSelectedId(selectedNotepad.id);
-    }
-    setShowNotepadPicker(true);
-  };
 
   const handleConfirmAdd = async () => {
     if (!selectedId || !popup.data?.id) return;
@@ -130,124 +164,70 @@ export function WordLookup() {
       });
       setPopup(prev => ({ ...prev, visible: false }));
       setShowNotepadPicker(false);
-      setShowConfirm(false);
     } catch (err) {
       setError('添加失败');
     }
   };
 
-  if (!popup.visible) return null;
+  if (!popup.visible && !showNotepadPicker && !error) return null;
 
   return (
-    <div
-      ref={popupRef}
-      className="fixed z-50 bg-white rounded-lg shadow-xl border border-gray-200"
-      style={{
-        left: Math.min(popup.x, window.innerWidth - 320),
-        top: Math.min(popup.y, window.innerHeight - 200),
-        width: '300px',
-      }}
-    >
-      {/* 顶部栏 */}
-      <div className="flex items-center justify-between px-4 py-2 bg-gray-50 rounded-t-lg border-b">
-        <div className="flex items-center space-x-2">
-          <span className="font-bold text-lg">{popup.word}</span>
-          {popup.data?.pronunciation && (
-            <span className="text-gray-500 text-sm">{popup.data.pronunciation}</span>
-          )}
+    <>
+      {/* 错误提示 */}
+      {error && (
+        <div
+          className="fixed z-50 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg"
+          style={{
+            left: '50%',
+            top: '20px',
+            transform: 'translateX(-50%)',
+          }}
+        >
+          {error}
         </div>
-        <div className="flex items-center space-x-1">
-          <button
-            onClick={handleAddToNotepad}
-            className="px-3 py-1 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 transition-colors"
-          >
-            添加到词本
-          </button>
-          <button
-            onClick={() => setPopup(prev => ({ ...prev, visible: false }))}
-            className="w-6 h-6 flex items-center justify-center text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-200"
-          >
-            ×
-          </button>
-        </div>
-      </div>
-
-      {/* 释义内容 */}
-      <div className="p-4 max-h-40 overflow-y-auto">
-        {popup.data?.definitions?.length > 0 ? (
-          <div className="space-y-2">
-            {popup.data.definitions.map((def: any, idx: number) => (
-              <div key={idx} className="flex">
-                <span className="text-green-700 font-medium w-12 flex-shrink-0">{def.type}</span>
-                <span className="text-gray-700">{def.meaning}</span>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-gray-500 italic">暂无释义</p>
-        )}
-      </div>
+      )}
 
       {/* 词本选择弹窗 */}
-      {showNotepadPicker && !showConfirm && (
-        <div className="border-t p-4">
-          <p className="text-sm font-medium text-gray-700 mb-2">选择词本：</p>
-          <select
-            value={selectedId}
-            onChange={(e) => setSelectedId(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg mb-3 focus:outline-none focus:ring-2 focus:ring-green-500"
-          >
-            <option value="">请选择词本</option>
-            {notepads.map((notepad) => (
-              <option key={notepad.id} value={notepad.id}>
-                {notepad.title}
-              </option>
-            ))}
-          </select>
-          <div className="flex justify-end space-x-2">
-            <button
-              onClick={() => setShowNotepadPicker(false)}
-              className="px-3 py-1.5 text-gray-600 hover:bg-gray-100 rounded-lg text-sm"
+      {showNotepadPicker && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-96">
+            <h3 className="text-lg font-bold mb-4">添加到词本</h3>
+            <p className="text-gray-600 mb-4">
+              将 <span className="font-bold text-green-700">{popup.word}</span> 添加到：
+            </p>
+            <select
+              value={selectedId}
+              onChange={(e) => setSelectedId(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-green-500"
             >
-              取消
-            </button>
-            <button
-              onClick={() => {
-                if (selectedId) setShowConfirm(true);
-              }}
-              disabled={!selectedId}
-              className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 disabled:opacity-50"
-            >
-              下一步
-            </button>
+              <option value="">请选择词本</option>
+              {notepads.map((notepad) => (
+                <option key={notepad.id} value={notepad.id}>
+                  {notepad.title}
+                </option>
+              ))}
+            </select>
+            <div className="flex justify-end space-x-2">
+              <button
+                onClick={() => {
+                  setShowNotepadPicker(false);
+                  setPopup(prev => ({ ...prev, visible: false }));
+                }}
+                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleConfirmAdd}
+                disabled={!selectedId || isLoading}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+              >
+                {isLoading ? '添加中...' : '确认添加'}
+              </button>
+            </div>
           </div>
         </div>
       )}
-
-      {/* 二次确认 */}
-      {showConfirm && (
-        <div className="border-t p-4">
-          <p className="text-sm text-gray-700 mb-3">
-            确定将 <span className="font-bold text-green-700">{popup.word}</span> 添加到词本？
-          </p>
-          {error && <p className="text-red-500 text-sm mb-2">{error}</p>}
-          <div className="flex justify-end space-x-2">
-            <button
-              onClick={() => setShowConfirm(false)}
-              className="px-3 py-1.5 text-gray-600 hover:bg-gray-100 rounded-lg text-sm"
-            >
-              返回
-            </button>
-            <button
-              onClick={handleConfirmAdd}
-              disabled={isLoading}
-              className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 disabled:opacity-50"
-            >
-              {isLoading ? '添加中...' : '确认添加'}
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
+    </>
   );
 }

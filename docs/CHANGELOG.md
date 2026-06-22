@@ -2,77 +2,132 @@
 
 本文件记录项目的所有重要变更。
 
+## [0.2.0] - 2026-06-22
+
+### 新增
+
+#### 独立弹窗窗口
+
+- 新增 `show_popup_window` Rust 命令，通过 `WebviewWindowBuilder` 创建独立窗口
+- 新增 `close_popup_window` Rust 命令关闭弹窗
+- 弹窗特性：无边框、置顶、不可调整大小、不显示在任务栏
+- 弹窗显示在鼠标光标位置
+- 通过 URL hash 参数传递单词数据
+- 按 Escape 或点击窗口外部自动关闭
+- 标题栏可拖动
+
+#### 有道词典集成
+
+- 新增 `lookup_dictionary` Rust 命令，调用 `dict.youdao.com/jsonapi`
+- 无需 API Key，免费获取音标、释义、例句、词形变化
+- 替代墨墨 API 的释义接口（墨墨 API 仅返回用户创建的解读，通常为空）
+
+#### 词本详情查看
+
+- 新增 `get_notepad_detail` Rust 命令获取词本详情
+- 新增 `NotepadViewer` 组件，展示词本中的单词列表
+- 单词详情显示有道词典释义、助记、例句
+- 支持"加入学习"和"添加到词本"操作
+
+#### 词本管理增强
+
+- 新增 `update_notepad` Rust 命令更新词本
+- 新增 `delete_notepad` Rust 命令删除词本
+- 新增编辑词本弹窗（修改标题、简介、标签、内容）
+- 新增管理模式：支持批量选择和删除词本
+- 词本卡片显示标签，支持按标签筛选
+
+#### 加入学习
+
+- 新增 `add_words_to_study` Rust 命令，调用 `POST /api/v1/study/add_words`
+- 弹窗和词本详情中均可将单词加入学习列表
+
+#### 添加到词本
+
+- 新增 `add_words_to_notepad` Rust 命令
+- 弹窗中可选择词本并添加单词
+- 自动去重，追加到词本 content
+
+### 修复
+
+#### 弹窗关闭问题
+
+- 修复 `window.close()` 在 Tauri webview 中无效的问题
+- 改用 Rust 后端 `close_popup_window` 命令关闭窗口
+
+#### 弹窗数据传递
+
+- 修复 hash 路由下 `window.location.search` 为空的问题
+- 改为从 `window.location.hash` 解析查询参数
+
+#### 弹窗内容显示
+
+- 修复弹窗显示主窗口内容而非释义的问题
+- 修复 `window.location.hash === "#/popup"` 精确匹配失败的问题
+- 改用 `startsWith` 判断 hash 路由
+
+#### API 文档修正
+
+- 修正 Base URL：`https://open.maimemo.com/open`
+- 修正所有 API 响应格式：包裹在 `{ "data": {...} }` 中
+- 修正 `GET /notepads` 需要 `limit`（最大 10）和 `offset` 参数
+- 移除不存在的 `GET /vocabulary/{id}` 端点
+- 移除不存在的 `POST /notepads/{id}/words` 端点
+
+---
+
 ## [0.1.0] - 2026-06-22
 
-### 初始版本
+### 新增
 
-#### 项目初始化
+#### 创建词本功能
 
-- 使用 `create-tauri-app` 初始化 Tauri + React + TypeScript 项目
-- 配置 Tailwind CSS 4 作为样式框架
-- 配置 Zustand 进行状态管理
+- 新增 `create_notepad` Rust 命令，调用墨墨 API `POST /notepads`
+- 新增 `createNotepad` TypeScript 封装函数
+- 词本管理界面新增「新建词本」弹窗：
+  - 词本名称（必填）
+  - 简介（必填）
+  - 标签（预定义 20 个标签，支持多选）
+  - 内容（可选）
+- 弹窗宽度 560px，支持滚动
 
-#### 前端实现
+#### 标签系统
 
-- 创建三个主要组件：
-  - `Monitor.tsx` - 划词监控界面
-  - `NotepadManager.tsx` - 词本管理界面
-  - `Settings.tsx` - 设置界面
-- 创建三个 Zustand stores：
-  - `wordStore.ts` - 单词状态管理
-  - `notepadStore.ts` - 词本状态管理
-  - `settingsStore.ts` - 设置状态管理
-- 创建 Tauri 命令封装 `tauri.ts`
+- 词本卡片展示标签
+- 新增标签筛选栏，自动收集所有不重复标签
+- 点击标签筛选，再点取消，「全部」按钮重置
 
-#### 后端实现
+#### Toast 全局提示
 
-- 添加 Tauri 命令：
-  - `get_clipboard_text` - 获取剪贴板文本
-  - `check_vocabulary` - 检查单词是否在墨墨词库
-  - `get_notepads` - 获取词本列表
-  - `add_words_to_notepad` - 添加单词到词本
-  - `get_cursor_position` - 获取鼠标位置
-  - `load_settings` / `save_settings` - 设置持久化
-- 集成 `tauri-plugin-clipboard-manager` 插件
-- 集成 `reqwest` 用于 HTTP 请求
+- 新增 `Toast` 组件和 `toastStore`
+- 替代 `alert()` 避免 Tauri webview 白屏
+- 支持 success / error / info 三种类型，3 秒自动消失
 
-#### 依赖配置
+### 修复
 
-- 添加 `@tauri-apps/plugin-store` 用于持久化存储
-- 添加 `tailwindcss`、`postcss`、`autoprefixer`
-- 添加 `@tailwindcss/postcss`（Tailwind CSS 4 需要）
-- 添加 `reqwest`、`tokio` 用于 Rust HTTP 请求
+#### 设置持久化
 
-#### 问题修复
+- Rust `Settings` 结构体添加 `#[serde(rename_all = "camelCase")]`
+- 修复 snake_case/camelCase 字段名不匹配导致 Token 重启后丢失
 
-- 修复 Tailwind CSS 4 配置问题：
-  - 使用 `@tailwindcss/postcss` 替代 `tailwindcss`
-  - 使用 `@import "tailwindcss"` 替代 `@tailwind` 指令
-- 修复 Rust 未使用导入警告
-- 修复输入 Token 时白屏问题（移除自动加载词本逻辑）
-- 移除自动剪贴板监控，改为仅快捷键触发
+#### Tauri 兼容性
 
-### 文档
+- 所有 Tauri API 调用收口到 `src/lib/tauri.ts`
+- 移除组件中直接 `import { invoke } from '@tauri-apps/api/core'`
+- 新增 `window.__TAURI_INTERNALS__` 环境检测，浏览器安全降级
+- 修复 `alert()` 导致的白屏问题
 
-- 创建设计文档 `docs/DESIGN.md`
-- 创建实现进度文档 `docs/PROGRESS.md`
-- 创建更新记录文档 `docs/CHANGELOG.md`
-- 创建 API 文档 `docs/API.md`
+#### API 响应适配
 
-### 移除功能
+- 修正词本列表取值路径：`result.data.notepads`
+- 修正创建词本响应取值：`result.data.notepad`
+- 修正创建词本请求体格式：`{ notepad: { title, brief, tags, content, status } }`
+- 词本字段名适配 API：`created_time` / `updated_time`
 
-- 移除单词归一化功能（DeepSeek API 集成）
-- 移除翻译 API 集成
-- 从设置界面移除 DeepSeek API Key 和翻译 API Key 配置
-- 从设置存储移除 deepseekApiKey 和 translationApiKey 字段
-- 移除自动剪贴板监控功能
+#### 其他修复
 
-### 设计变更
-
-- 架构图改为 Mermaid 格式
-- 添加浏览器插件架构设计（后期实现）
-- 创建 UI 设计规范文档 `docs/UI.md`
-- 快捷键改为仅触发查询，不再自动监控剪贴板
+- 修复 `Settings.tsx` 未使用的 `loadSettings` 导入警告
+- 词本数量超限时的错误处理
 
 ---
 

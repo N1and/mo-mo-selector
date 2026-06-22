@@ -1,22 +1,28 @@
 # 墨墨单词助手 - API 文档
 
-本文档描述墨墨单词助手使用的外部 API 接口。
+本文档描述墨墨单词助手使用的外部 API 接口及内部 Tauri 命令。
 
 ## 目录
 
-- [墨墨背单词 API](#墨墨背单词-api)
-  - [认证](#认证)
-  - [基础信息](#基础信息)
-  - [词汇接口](#词汇接口)
-  - [词本接口](#词本接口)
-  - [错误处理](#错误处理)
+- [外部 API](#外部-api)
+  - [墨墨背单词 API](#墨墨背单词-api)
+  - [有道词典 API](#有道词典-api)
 - [Tauri 命令接口](#tauri-命令接口)
 
 ---
 
-## 墨墨背单词 API
+## 外部 API
 
-### 认证
+### 墨墨背单词 API
+
+#### 基础信息
+
+| 项目 | 值 |
+|------|-----|
+| Base URL | `https://open.maimemo.com/open` |
+| 认证方式 | Bearer Token |
+| 请求格式 | JSON |
+| 响应格式 | JSON（包裹在 `data` 字段中） |
 
 所有请求需要在 Header 中携带 Bearer Token：
 
@@ -24,18 +30,11 @@
 Authorization: Bearer {your_token}
 ```
 
-Token 获取方式：墨墨背单词 App → 我的 → 更多设置 → 实验功能 → 开放 API
+Token 获取方式：
+1. 墨墨背单词 App → 我的 → 更多设置 → 实验功能 → 开放 API
+2. 或点击[此处](https://open.maimemo.com/open/api/v1/tokens/openapi)获取
 
-### 基础信息
-
-| 项目 | 值 |
-|------|-----|
-| Base URL | `https://open.maimemo.com/open/api/v1` |
-| 认证方式 | Bearer Token |
-| 请求格式 | JSON |
-| 响应格式 | JSON |
-
-### 请求频率限制
+#### 请求频率限制
 
 | 时间窗口 | 最大请求数 |
 |----------|------------|
@@ -43,487 +42,346 @@ Token 获取方式：墨墨背单词 App → 我的 → 更多设置 → 实验�
 | 60 秒 | 40 次 |
 | 5 小时 | 2000 次 |
 
----
-
-### 词汇接口
-
-#### 查询单词
-
-获取单词的 `voc_id`，后续操作需要使用此 ID。
-
-**请求**
+#### 词汇查询
 
 ```
-GET /vocabulary?spelling={word}
+GET /api/v1/vocabulary?spelling={word}
 ```
 
-**参数**
+返回单词的 `id` 和 `spelling`，用于后续操作。
 
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| spelling | string | 是 | 单词拼写 |
-
-**响应示例**
-
+响应示例：
 ```json
 {
-  "code": 0,
   "data": {
-    "id": "voc_xxxxx",
-    "spelling": "hello",
-    "pronunciation": "/həˈloʊ/",
-    "definitions": [
-      {
-        "type": "n.",
-        "meaning": "问候；招呼"
-      }
-    ]
-  }
-}
-```
-
-**错误响应**
-
-```json
-{
-  "code": 404,
-  "message": "Word not found"
-}
-```
-
----
-
-#### 批量查询单词
-
-**请求**
-
-```
-POST /vocabulary/query
-```
-
-**请求体**
-
-```json
-{
-  "spellings": ["hello", "world", "test"]
-}
-```
-
-**参数说明**
-
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| spellings | string[] | 是 | 单词列表，最多 1000 个 |
-
-**响应示例**
-
-```json
-{
-  "code": 0,
-  "data": [
-    {
-      "id": "voc_xxxxx",
+    "voc": {
+      "id": "5a7BFf4F63612e5AD9fdebB7a50D3881",
       "spelling": "hello"
-    },
-    {
-      "id": "voc_yyyyy",
-      "spelling": "world"
     }
-  ]
-}
-```
-
----
-
-#### 获取单词详情
-
-**请求**
-
-```
-GET /vocabulary/{id}
-```
-
-**参数**
-
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| id | string | 是 | 单词的 voc_id |
-
-**响应示例**
-
-```json
-{
-  "code": 0,
-  "data": {
-    "id": "voc_xxxxx",
-    "spelling": "hello",
-    "pronunciation": "/həˈloʊ/",
-    "definitions": [
-      {
-        "type": "n.",
-        "meaning": "问候；招呼"
-      },
-      {
-        "type": "v.",
-        "meaning": "打招呼"
-      }
-    ],
-    "tags": ["基础词汇", "日常用语"]
   }
 }
 ```
 
----
+#### 批量查询词汇
 
-### 词本接口
+```
+POST /api/v1/vocabulary/query
+```
+
+请求体：
+```json
+{ "ids": ["voc_id_1", "voc_id_2"] }
+```
 
 #### 获取词本列表
 
-**请求**
-
 ```
-GET /notepads
+GET /api/v1/notepads?limit={limit}&offset={offset}
 ```
 
-**响应示例**
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| limit | integer | 是 | 查询数量（最大 10） |
+| offset | integer | 是 | 分页偏移量 |
 
-```json
-{
-  "code": 0,
-  "data": [
-    {
-      "id": "notepad_xxxxx",
-      "title": "我的词本",
-      "brief": "日常积累的单词",
-      "tags": ["日常", "高频"],
-      "wordCount": 128,
-      "createdAt": "2026-01-15T10:30:00Z",
-      "updatedAt": "2026-06-20T14:20:00Z"
-    }
-  ]
-}
+#### 获取词本详情
+
+```
+GET /api/v1/notepads/{id}
 ```
 
----
+返回 `content`（原始内容）和 `list`（结构化列表）字段。
 
 #### 创建词本
 
-**请求**
-
 ```
-POST /notepads
+POST /api/v1/notepads
 ```
 
-**请求体**
-
+请求体：
 ```json
 {
-  "title": "新词本",
-  "brief": "词本描述",
-  "tags": ["标签1", "标签2"]
-}
-```
-
-**参数说明**
-
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| title | string | 是 | 词本名称 |
-| brief | string | 否 | 词本描述 |
-| tags | string[] | 否 | 标签列表 |
-
-**响应示例**
-
-```json
-{
-  "code": 0,
-  "data": {
-    "id": "notepad_yyyyy",
-    "title": "新词本",
+  "notepad": {
+    "title": "词本名称",
     "brief": "词本描述",
-    "tags": ["标签1", "标签2"],
-    "wordCount": 0,
-    "createdAt": "2026-06-22T10:30:00Z",
-    "updatedAt": "2026-06-22T10:30:00Z"
+    "tags": ["考研"],
+    "content": "hello\nworld",
+    "status": "UNPUBLISHED"
   }
 }
 ```
 
----
+预定义标签：`小学` `初中` `高中` `大学教科书` `四级` `六级` `专四` `专八` `考研` `新概念` `SAT` `托福` `雅思` `GRE` `GMAT` `托业` `BEC` `词典` `词频` `其他`
 
 #### 更新词本
 
-**请求**
-
 ```
-POST /notepads/{id}
+POST /api/v1/notepads/{id}
 ```
 
-**参数**
-
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| id | string | 是 | 词本 ID |
-
-**请求体**
-
-```json
-{
-  "title": "更新后的名称",
-  "brief": "更新后的描述"
-}
-```
-
-**响应示例**
-
-```json
-{
-  "code": 0,
-  "data": {
-    "id": "notepad_xxxxx",
-    "title": "更新后的名称",
-    "brief": "更新后的描述",
-    "updatedAt": "2026-06-22T11:00:00Z"
-  }
-}
-```
-
----
+需提供所有必填字段，不支持部分更新。修改 `content` 字段来增删单词。
 
 #### 删除词本
 
-**请求**
-
 ```
-DELETE /notepads/{id}
+DELETE /api/v1/notepads/{id}
 ```
 
-**参数**
+#### 获取释义
 
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| id | string | 是 | 词本 ID |
+```
+GET /api/v1/interpretations?voc_id={id}
+```
 
-**响应示例**
+#### 获取助记
 
+```
+GET /api/v1/notes?voc_id={id}
+```
+
+#### 获取例句
+
+```
+GET /api/v1/phrases?voc_id={id}
+```
+
+#### 加入学习（公测）
+
+```
+POST /api/v1/study/add_words
+```
+
+请求体：
 ```json
 {
-  "code": 0,
-  "message": "Notepad deleted successfully"
+  "words": [{ "id": "voc_id" }],
+  "advance": false
 }
 ```
+
+#### 错误码
+
+| 错误码 | 说明 |
+|--------|------|
+| 0 | 成功 |
+| 400 | 请求参数错误 |
+| 401 | 认证失败 |
+| 404 | 资源不存在 |
+| 429 | 请求频率超限 |
+| 500 | 服务器错误 |
 
 ---
 
-#### 向词本添加单词
+### 有道词典 API
 
-**请求**
+无需 API Key，用于获取单词释义、音标、例句、词形变化。
 
 ```
-POST /notepads/{id}/words
+GET https://dict.youdao.com/jsonapi?q={word}
 ```
 
-**参数**
-
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| id | string | 是 | 词本 ID |
-
-**请求体**
-
+响应结构（简化）：
 ```json
 {
-  "voc_ids": ["voc_xxxxx", "voc_yyyyy"]
-}
-```
-
-**参数说明**
-
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| voc_ids | string[] | 是 | 单词 ID 列表 |
-
-**响应示例**
-
-```json
-{
-  "code": 0,
-  "message": "Words added successfully",
-  "data": {
-    "addedCount": 2,
-    "duplicateCount": 0
+  "ec": {
+    "word": [{
+      "usphone": "həˈloʊ",
+      "ukphone": "həˈləʊ",
+      "trs": [{ "tr": [{ "l": { "i": ["int. 你好"] } }] }],
+      "wfs": [{ "wf": { "name": "复数", "value": "hellos" } }]
+    }]
+  },
+  "blng_sents_part": {
+    "sentence-pair": [{
+      "sentence": "Hello, how are you?",
+      "sentence-translation": "你好，你好吗？"
+    }]
   }
 }
 ```
-
----
-
-#### 从词本移除单词
-
-**请求**
-
-```
-DELETE /notepads/{id}/words
-```
-
-**参数**
-
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| id | string | 是 | 词本 ID |
-
-**请求体**
-
-```json
-{
-  "voc_ids": ["voc_xxxxx"]
-}
-```
-
-**响应示例**
-
-```json
-{
-  "code": 0,
-  "message": "Words removed successfully"
-}
-```
-
----
-
-### 错误处理
-
-#### 错误响应格式
-
-```json
-{
-  "code": 400,
-  "message": "Error description"
-}
-```
-
-#### 常见错误码
-
-| 错误码 | 说明 | 处理建议 |
-|--------|------|----------|
-| 0 | 成功 | - |
-| 400 | 请求参数错误 | 检查请求参数 |
-| 401 | 认证失败 | 检查 Token 是否正确 |
-| 404 | 资源不存在 | 检查 ID 是否正确 |
-| 429 | 请求频率超限 | 等待后重试 |
-| 500 | 服务器错误 | 稍后重试 |
 
 ---
 
 ## Tauri 命令接口
 
-以下是本应用定义的 Tauri 命令，用于前端调用 Rust 后端。
+以下是应用内部的 Tauri 命令，前端通过 `invoke` 调用。
+
+所有命令返回格式：`{ "data": { ... } }`
 
 ### get_clipboard_text
 
-获取系统剪贴板中的文本内容。
-
-**调用方式**
+获取系统剪贴板文本。
 
 ```typescript
-import { invoke } from '@tauri-apps/api/core';
-
 const text = await invoke<string>('get_clipboard_text');
 ```
 
-**返回值**
+### load_settings
 
-- `string` - 剪贴板文本内容
+加载本地设置。
 
----
+```typescript
+const settings = await invoke('load_settings');
+```
+
+返回 `Settings` 对象，包含 `maimemoToken`、`hotkey`、`selectedNotepadId` 等字段。
+
+### save_settings
+
+保存本地设置。
+
+```typescript
+await invoke('save_settings', { settings });
+```
 
 ### check_vocabulary
 
-检查单词是否在墨墨词库中。
-
-**调用方式**
+查询单词是否在墨墨词库中，返回 `voc_id`。
 
 ```typescript
-const result = await invoke('check_vocabulary', { 
-  spelling: 'hello', 
-  token: 'your_maimemo_token' 
+const result = await invoke('check_vocabulary', { spelling: 'hello', token: '...' });
+// result.data.voc.id → voc_id
+```
+
+### lookup_dictionary
+
+通过有道词典查询单词释义（免费，无需 API Key）。
+
+```typescript
+const result = await invoke('lookup_dictionary', { word: 'hello' });
+// result.data.definitions → string[]
+// result.data.phonetic → 美式音标
+// result.data.uk_phonetic → 英式音标
+// result.data.examples → { sentence, translation }[]
+// result.data.word_forms → { form, value }[]
+```
+
+### show_popup_window
+
+创建独立弹窗窗口显示单词释义，位于鼠标光标位置。
+
+```typescript
+await invoke('show_popup_window', {
+  x: 600, y: 400,
+  word: 'hello',
+  definitions: ['int. 你好'],
+  phonetic: 'həˈloʊ',
+  ukPhonetic: 'həˈləʊ',
+  vocId: 'voc_id...',
+  token: '...'
 });
 ```
 
-**参数**
+窗口特性：无边框、置顶、不显示在任务栏、不可调整大小。
 
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| spelling | string | 是 | 单词拼写 |
-| token | string | 是 | 墨墨 API Token |
+### close_popup_window
 
-**返回值**
+关闭弹窗窗口。
 
-- `object` - 单词信息，包含 `id`、`spelling` 等字段
-
----
+```typescript
+await invoke('close_popup_window');
+```
 
 ### get_notepads
 
-获取用户的所有云词本。
-
-**调用方式**
+获取用户所有云词本（自动分页遍历）。
 
 ```typescript
-const result = await invoke('get_notepads', { 
-  token: 'your_maimemo_token' 
+const result = await invoke('get_notepads', { token: '...' });
+// result.data.notepads → { id, title, brief, tags, ... }[]
+```
+
+### get_notepad_detail
+
+获取词本详情（含 content 和 list）。
+
+```typescript
+const result = await invoke('get_notepad_detail', { notepadId: '...', token: '...' });
+// result.data.notepad.content → 原始内容
+// result.data.notepad.list → 结构化列表
+```
+
+### create_notepad
+
+创建新词本。
+
+```typescript
+const result = await invoke('create_notepad', {
+  title: '新词本',
+  brief: '描述',
+  tags: ['考研'],
+  content: ' ',
+  token: '...'
 });
 ```
 
-**参数**
+### update_notepad
 
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| token | string | 是 | 墨墨 API Token |
-
-**返回值**
-
-- `object[]` - 词本列表
-
----
-
-## 使用示例
-
-### 完整的单词添加流程
+更新词本（需提供完整内容）。
 
 ```typescript
-import { invoke } from '@tauri-apps/api/core';
+await invoke('update_notepad', {
+  notepadId: '...',
+  title: '名称',
+  brief: '描述',
+  tags: ['考研'],
+  content: 'hello\nworld',
+  token: '...'
+});
+```
 
-async function addWordToNotepad(word: string, notepadId: string, token: string) {
-  // 1. 检查单词是否在词库中
-  const vocabulary = await invoke('check_vocabulary', { spelling: word, token });
-  
-  if (!vocabulary?.data?.id) {
-    throw new Error('单词不在词库中');
-  }
-  
-  // 2. 获取词本列表（验证词本存在）
-  const notepads = await invoke('get_notepads', { token });
-  const notepad = notepads?.data?.find(n => n.id === notepadId);
-  
-  if (!notepad) {
-    throw new Error('词本不存在');
-  }
-  
-  // 3. 添加单词到词本（需要直接调用墨墨 API）
-  const response = await fetch(`https://open.maimemo.com/open/api/v1/notepads/${notepadId}/words`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      voc_ids: [vocabulary.data.id]
-    })
-  });
-  
-  return response.json();
-}
+### delete_notepad
+
+删除词本。
+
+```typescript
+await invoke('delete_notepad', { notepadId: '...', token: '...' });
+```
+
+### add_words_to_notepad
+
+向词本添加单词（自动去重）。
+
+```typescript
+const result = await invoke('add_words_to_notepad', {
+  notepadId: '...',
+  vocIds: ['voc_id_1', 'voc_id_2'],
+  token: '...'
+});
+// result.data.added_count → 实际添加数量
+```
+
+### add_words_to_study
+
+将单词加入学习列表。
+
+```typescript
+await invoke('add_words_to_study', {
+  vocIds: ['voc_id_1'],
+  advance: false,
+  token: '...'
+});
+```
+
+### get_word_details
+
+批量获取单词详情（释义、助记、例句）。
+
+```typescript
+const result = await invoke('get_word_details', {
+  spellings: ['hello', 'world'],
+  token: '...'
+});
+// result.data.words → [{ spelling, voc_id, interpretations, notes, phrases }]
+```
+
+### get_cursor_position
+
+获取鼠标光标屏幕坐标（仅 Windows）。
+
+```typescript
+const pos = await invoke('get_cursor_position');
+// pos.x, pos.y
 ```
 
 ---

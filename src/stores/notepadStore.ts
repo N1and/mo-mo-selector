@@ -5,9 +5,10 @@ interface Notepad {
   title: string;
   brief?: string;
   tags?: string[];
-  wordCount: number;
-  createdAt: Date;
-  updatedAt: Date;
+  status?: string;
+  content?: string;
+  created_time?: string;
+  updated_time?: string;
 }
 
 interface NotepadState {
@@ -26,7 +27,7 @@ export const useNotepadStore = create<NotepadState>((set) => ({
   notepads: [],
   selectedNotepad: null,
   isLoading: false,
-  setNotepads: (notepads) => set({ notepads }),
+  setNotepads: (notepads) => set({ notepads: Array.isArray(notepads) ? notepads : [] }),
   setSelectedNotepad: (notepad) => set({ selectedNotepad: notepad }),
   addNotepad: (notepad) =>
     set((state) => ({
