@@ -1,0 +1,298 @@
+# 墨墨单词助手 API 文档
+# 由 scripts/generate-api-doc.js 自动生成
+
+openapi: 3.0.3
+info:
+  title: 墨墨单词助手 API
+  description: 墨墨单词助手内部 API 文档
+  version: 0.1.0
+  contact:
+    name: MoMoSelector
+servers:
+
+  - url: "tauri://localhost"
+    description: Tauri 本地服务
+paths:
+  /greet:
+    post:
+      operationId: greet
+      summary: 问候接口
+      description: 测试用问候接口
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+
+                - name
+              properties:
+                name:
+                  type: string
+                  description: 用户名
+      responses:
+        200:
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: string
+  /load_settings:
+    post:
+      operationId: loadSettings
+      summary: 加载设置
+      description: 从本地文件加载用户设置
+      responses:
+        200:
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Settings"
+  /save_settings:
+    post:
+      operationId: saveSettings
+      summary: 保存设置
+      description: 将用户设置保存到本地文件
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Settings"
+      responses:
+        200:
+          description: 成功
+  /get_clipboard_text:
+    post:
+      operationId: getClipboardText
+      summary: 获取剪贴板文本
+      description: 获取系统剪贴板中的文本内容
+      responses:
+        200:
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: string
+  /get_cursor_position:
+    post:
+      operationId: getCursorPosition
+      summary: 获取鼠标位置
+      description: 获取当前鼠标光标的屏幕坐标
+      responses:
+        200:
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Position"
+  /check_vocabulary:
+    post:
+      operationId: checkVocabulary
+      summary: 查询单词
+      description: 调用墨墨 API 查询单词信息
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+
+                - spelling
+                - token
+              properties:
+                spelling:
+                  type: string
+                  description: 单词拼写
+                token:
+                  type: string
+                  description: 墨墨 API Token
+      responses:
+        200:
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VocabularyResponse"
+  /get_notepads:
+    post:
+      operationId: getNotepads
+      summary: 获取词本列表
+      description: 调用墨墨 API 获取用户的所有云词本
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+
+                - token
+              properties:
+                token:
+                  type: string
+                  description: 墨墨 API Token
+      responses:
+        200:
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotepadsResponse"
+  /add_words_to_notepad:
+    post:
+      operationId: addWordsToNotepad
+      summary: 添加单词到词本
+      description: 调用墨墨 API 向指定词本添加单词
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+
+                - notepadId
+                - vocIds
+                - token
+              properties:
+                notepadId:
+                  type: string
+                  description: 词本 ID
+                vocIds:
+                  type: array
+                  items:
+                    type: string
+                  description: 单词 ID 列表
+                token:
+                  type: string
+                  description: 墨墨 API Token
+      responses:
+        200:
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AddWordsResponse"
+components:
+  schemas:
+    Settings:
+      type: object
+      properties:
+        maimemoToken:
+          type: string
+          description: 墨墨 API Token
+        selectedNotepadId:
+          type: string
+          description: 选中的词本 ID
+        autoStart:
+          type: boolean
+          description: 开机自启动
+          default: false
+        hotkey:
+          type: string
+          description: 快捷键
+          default: Ctrl+Shift+A
+        monitorClipboard:
+          type: boolean
+          description: 剪贴板监控
+          default: true
+    Position:
+      type: object
+      properties:
+        x:
+          type: integer
+          description: X 坐标
+        y:
+          type: integer
+          description: Y 坐标
+    VocabularyResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        data:
+          type: object
+          properties:
+            id:
+              type: string
+              description: 单词 ID
+            spelling:
+              type: string
+              description: 单词拼写
+            pronunciation:
+              type: string
+              description: 音标
+            definitions:
+              type: array
+              items:
+                $ref: "#/components/schemas/Definition"
+    Definition:
+      type: object
+      properties:
+        type:
+          type: string
+          description: 词性
+        meaning:
+          type: string
+          description: 释义
+    NotepadsResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Notepad"
+    Notepad:
+      type: object
+      properties:
+        id:
+          type: string
+          description: 词本 ID
+        title:
+          type: string
+          description: 词本名称
+        brief:
+          type: string
+          description: 词本描述
+        tags:
+          type: array
+          items:
+            type: string
+        wordCount:
+          type: integer
+          description: 单词数量
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    AddWordsResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          type: object
+          properties:
+            addedCount:
+              type: integer
+              description: 添加成功数量
+            duplicateCount:
+              type: integer
+              description: 重复数量
+    Error:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string

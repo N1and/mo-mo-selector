@@ -1,0 +1,36 @@
+{
+  "name": "mo-mo-selector",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "tauri dev": "tauri dev",
+    "api:validate": "node scripts/generate-api-doc.cjs validate",
+    "api:stats": "node scripts/generate-api-doc.cjs stats",
+    "api:serve": "node scripts/generate-api-doc.cjs serve",
+    "api:yaml": "node scripts/generate-api-doc.cjs convert"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-opener": "^2",
+    "@tauri-apps/plugin-store": "^2.4.3",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "zustand": "^5.0.14"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.1",
+    "@tauri-apps/cli": "^2",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@vitejs/plugin-react": "^4.6.0",
+    "autoprefixer": "^10.5.0",
+    "postcss": "^8.5.15",
+    "tailwindcss": "^4.3.1",
+    "typescript": "~5.8.3",
+    "vite": "^7.0.4"
+  }
+}
