@@ -66,7 +66,7 @@ fn save_settings(app: tauri::AppHandle, settings: Settings) -> Result<(), String
 }
 
 #[tauri::command]
-async fn show_popup_window(app: tauri::AppHandle, x: f64, y: f64, word: String, definitions: Vec<String>, examples: Vec<String>, phonetic: String, uk_phonetic: String, voc_id: String, token: String) -> Result<(), String> {
+async fn show_popup_window(app: tauri::AppHandle, x: f64, y: f64, word: String, definitions: Vec<String>, examples: Vec<serde_json::Value>, phonetic: String, uk_phonetic: String, voc_id: String, token: String, word_forms: Vec<serde_json::Value>, web_translations: Vec<String>, synonyms: Vec<String>, antonyms: Vec<String>) -> Result<(), String> {
     use tauri::WebviewUrl;
     use tauri::WebviewWindowBuilder;
     
@@ -78,10 +78,14 @@ async fn show_popup_window(app: tauri::AppHandle, x: f64, y: f64, word: String, 
     }
     
     let popup_width = 400.0;
-    let popup_height = 350.0;
+    let popup_height = 500.0;
     
     let defs_json = serde_json::to_string(&definitions).unwrap_or_default();
     let examples_json = serde_json::to_string(&examples).unwrap_or_default();
+    let word_forms_json = serde_json::to_string(&word_forms).unwrap_or_default();
+    let web_trans_json = serde_json::to_string(&web_translations).unwrap_or_default();
+    let synonyms_json = serde_json::to_string(&synonyms).unwrap_or_default();
+    let antonyms_json = serde_json::to_string(&antonyms).unwrap_or_default();
     let encoded_word = urlencoding::encode(&word);
     let encoded_defs = urlencoding::encode(&defs_json);
     let encoded_examples = urlencoding::encode(&examples_json);
@@ -89,9 +93,13 @@ async fn show_popup_window(app: tauri::AppHandle, x: f64, y: f64, word: String, 
     let encoded_uk = urlencoding::encode(&uk_phonetic);
     let encoded_voc_id = urlencoding::encode(&voc_id);
     let encoded_token = urlencoding::encode(&token);
+    let encoded_word_forms = urlencoding::encode(&word_forms_json);
+    let encoded_web_trans = urlencoding::encode(&web_trans_json);
+    let encoded_synonyms = urlencoding::encode(&synonyms_json);
+    let encoded_antonyms = urlencoding::encode(&antonyms_json);
     let url = format!(
-        "index.html#/popup?word={}&definitions={}&examples={}&phonetic={}&uk_phonetic={}&voc_id={}&token={}",
-        encoded_word, encoded_defs, encoded_examples, encoded_phonetic, encoded_uk, encoded_voc_id, encoded_token
+        "index.html#/popup?word={}&definitions={}&examples={}&phonetic={}&uk_phonetic={}&voc_id={}&token={}&word_forms={}&web_translations={}&synonyms={}&antonyms={}",
+        encoded_word, encoded_defs, encoded_examples, encoded_phonetic, encoded_uk, encoded_voc_id, encoded_token, encoded_word_forms, encoded_web_trans, encoded_synonyms, encoded_antonyms
     );
     
     WebviewWindowBuilder::new(
@@ -262,8 +270,11 @@ async fn add_words_to_notepad(notepad_id: String, voc_ids: Vec<String>, token: S
     // 3. 将新单词追加到 content
     let mut words: Vec<&str> = current_content.lines().filter(|l| !l.trim().is_empty()).collect();
     let mut added_count = 0;
+    let mut exist_count = 0;
     for spelling in &new_spellings {
-        if !words.contains(&spelling.as_str()) {
+        if words.contains(&spelling.as_str()) {
+            exist_count += 1;
+        } else {
             words.push(spelling);
             added_count += 1;
         }
@@ -297,6 +308,7 @@ async fn add_words_to_notepad(notepad_id: String, voc_ids: Vec<String>, token: S
         "data": {
             "success": true,
             "added_count": added_count,
+            "exist_count": exist_count,
             "notepad": result_inner["notepad"]
         }
     }))
@@ -505,17 +517,6 @@ async fn lookup_dictionary(word: String) -> Result<serde_json::Value, String> {
         }
     }
     
-    // 提取例句
-    let mut examples = Vec::new();
-    if let Some(sent) = data["blng_sents_part"]["sentence-pair"].as_array() {
-        for s in sent.iter().take(3) {
-            examples.push(serde_json::json!({
-                "sentence": s["sentence"].as_str().unwrap_or(""),
-                "translation": s["sentence-translation"].as_str().unwrap_or("")
-            }));
-        }
-    }
-    
     // 提取词形变化
     let mut word_forms = Vec::new();
     if let Some(wfs) = data["ec"]["word"][0]["wfs"].as_array() {
@@ -531,6 +532,56 @@ async fn lookup_dictionary(word: String) -> Result<serde_json::Value, String> {
         }
     }
     
+    // 提取例句（直接取前5条双语例句）
+    let mut examples = Vec::new();
+    if let Some(sent) = data["blng_sents_part"]["sentence-pair"].as_array() {
+        for s in sent.iter().take(5) {
+            let en = s["sentence"].as_str().unwrap_or("");
+            let cn = s["sentence-translation"].as_str().unwrap_or("");
+            if !en.is_empty() {
+                examples.push(serde_json::json!({
+                    "sentence": en,
+                    "translation": cn
+                }));
+            }
+        }
+    }
+    
+    // 提取网络释义
+    let mut web_translations = Vec::new();
+    if let Some(web) = data["web_trans"]["web-translation"].as_array() {
+        for w in web.iter().take(5) {
+            if let Some(trans) = w["trans"].as_array() {
+                for t in trans {
+                    if let Some(tr) = t["value"].as_str() {
+                        web_translations.push(tr.to_string());
+                    }
+                }
+            }
+        }
+    }
+    
+    // 提取同反义词
+    let mut synonyms = Vec::new();
+    let mut antonyms = Vec::new();
+    if let Some(rel) = data["rel_word"]["rel"].as_array() {
+        for r in rel {
+            if let Some(type_name) = r["type"].as_str() {
+                if let Some(words) = r["words"].as_array() {
+                    for w in words {
+                        if let Some(wl) = w["word"].as_str() {
+                            match type_name {
+                                "syno" => synonyms.push(wl.to_string()),
+                                "anton" => antonyms.push(wl.to_string()),
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
     Ok(serde_json::json!({
         "data": {
             "word": word,
@@ -538,7 +589,10 @@ async fn lookup_dictionary(word: String) -> Result<serde_json::Value, String> {
             "uk_phonetic": uk_phonetic,
             "definitions": definitions,
             "examples": examples,
-            "word_forms": word_forms
+            "word_forms": word_forms,
+            "web_translations": web_translations,
+            "synonyms": synonyms,
+            "antonyms": antonyms
         }
     }))
 }

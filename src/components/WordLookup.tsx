@@ -59,16 +59,44 @@ export function WordLookup() {
 
       setIsLoading(true);
       
-      const [vocabResult, dictResult] = await Promise.all([
-        checkVocabulary(word, settings.maimemoToken).catch(() => null),
-        lookupDictionary(word).catch(() => null)
-      ]);
-      
-      console.log('Vocabulary result:', vocabResult);
-      console.log('Dictionary result:', dictResult);
-      
-      const vocData = vocabResult?.data?.voc;
+      // 先查有道词典获取词形信息（用小写查有道）
+      const dictResult = await lookupDictionary(word.toLowerCase()).catch(() => null);
       const dictData = dictResult?.data;
+      
+      // 查墨墨词库，先用原词
+      let vocabResult = await checkVocabulary(word, settings.maimemoToken).catch(() => null);
+      let vocData = vocabResult?.data?.voc;
+      let lookupWord = word;
+      
+      // 如果原词没找到，尝试用小写形式
+      if (!vocData) {
+        const lowerWord = word.toLowerCase();
+        if (lowerWord !== word) {
+          const lowerResult = await checkVocabulary(lowerWord, settings.maimemoToken).catch(() => null);
+          if (lowerResult?.data?.voc) {
+            vocData = lowerResult.data.voc;
+            addLog(`大小写匹配: ${word} → ${lowerWord}`, 'info');
+          }
+        }
+      }
+      
+      // 如果还没找到，尝试用词形还原
+      if (!vocData && dictData?.word_forms?.length > 0) {
+        for (const wf of dictData.word_forms) {
+          const baseForm = wf.value.toLowerCase();
+          if (baseForm !== word.toLowerCase()) {
+            const altResult = await checkVocabulary(baseForm, settings.maimemoToken).catch(() => null);
+            if (altResult?.data?.voc) {
+              vocData = altResult.data.voc;
+              addLog(`词形还原: ${word} → ${baseForm}`, 'info');
+              break;
+            }
+          }
+        }
+      }
+      
+      console.log('Vocabulary result:', vocData);
+      console.log('Dictionary result:', dictData);
       
       if (vocData || dictData) {
         const x = mouseX ?? 400;
@@ -77,29 +105,33 @@ export function WordLookup() {
         await showPopupWindow(
           x,
           y,
-          word,
+          lookupWord,
           dictData?.definitions || [],
-          dictData?.examples?.map((e: any) => e.sentence) || [],
+          dictData?.examples || [],
           dictData?.phonetic || '',
           dictData?.uk_phonetic || '',
           vocData?.id || '',
-          settings.maimemoToken
+          settings.maimemoToken,
+          dictData?.word_forms || [],
+          dictData?.web_translations || [],
+          dictData?.synonyms || [],
+          dictData?.antonyms || []
         );
         
         setPopup({
           visible: true,
           x: x,
           y: y,
-          word: word,
+          word: lookupWord,
           data: {
             id: vocData?.id,
-            spelling: word,
+            spelling: lookupWord,
           },
         });
 
         setCurrentWord({
           id: Date.now().toString(),
-          spelling: word,
+          spelling: lookupWord,
           vocId: vocData?.id,
           definitions: (dictData?.definitions || []).slice(0, 5),
           addedAt: new Date(),
@@ -107,13 +139,13 @@ export function WordLookup() {
 
         addRecentWord({
           id: Date.now().toString(),
-          spelling: word,
+          spelling: lookupWord,
           vocId: vocData?.id,
           definitions: (dictData?.definitions || []).slice(0, 5),
           addedAt: new Date(),
         });
 
-        addLog(`查词成功: ${word}`, 'success');
+        addLog(`查词成功: ${lookupWord}`, 'success');
       } else {
         showToast('查询失败', 'error');
         addLog(`查询失败: ${word}`, 'error');
@@ -150,17 +182,9 @@ export function WordLookup() {
       const altMatch = e.altKey === needAlt;
       const keyMatch = e.key.toLowerCase() === key?.toLowerCase();
       
-      console.log('Hotkey check:', {
-        hotkey,
-        needCtrl, needShift, needAlt, key,
-        actualCtrl: e.ctrlKey, actualShift: e.shiftKey, actualAlt: e.altKey, actualKey: e.key,
-        ctrlMatch, shiftMatch, altMatch, keyMatch
-      });
-      
       if (ctrlMatch && shiftMatch && altMatch && keyMatch) {
         e.preventDefault();
         e.stopPropagation();
-        console.log('Hotkey matched, calling lookupWord at', lastMouseX, lastMouseY);
         lookupWord(lastMouseX, lastMouseY);
       }
     };

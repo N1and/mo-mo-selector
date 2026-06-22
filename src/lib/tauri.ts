@@ -74,8 +74,8 @@ export async function addWordsToStudy(vocIds: string[], advance: boolean, token:
   return invoke('add_words_to_study', { vocIds, advance, token });
 }
 
-export async function showPopupWindow(x: number, y: number, word: string, definitions: string[], examples: string[], phonetic: string, ukPhonetic: string, vocId: string, token: string): Promise<void> {
-  return invoke('show_popup_window', { x, y, word, definitions, examples, phonetic, ukPhonetic, vocId, token });
+export async function showPopupWindow(x: number, y: number, word: string, definitions: string[], examples: { sentence: string; translation: string; pos: string }[], phonetic: string, ukPhonetic: string, vocId: string, token: string, wordForms: { form: string; value: string }[], webTranslations: string[], synonyms: string[], antonyms: string[]): Promise<void> {
+  return invoke('show_popup_window', { x, y, word, definitions, examples, phonetic, ukPhonetic, vocId, token, wordForms, webTranslations, synonyms, antonyms });
 }
 
 export async function closePopupWindow(): Promise<void> {

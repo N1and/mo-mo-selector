@@ -1,8 +1,8 @@
 import { useWordStore } from '../stores';
 
-export function TodayWords() {
-  const { getTodayWords } = useWordStore();
-  const todayWords = getTodayWords();
+export function HistoryWords() {
+  const { getTodayWords, clearRecentWords } = useWordStore();
+  const words = getTodayWords();
 
   const handleClick = (spelling: string) => {
     navigator.clipboard.writeText(spelling);
@@ -13,23 +13,30 @@ export function TodayWords() {
     <div className="h-full flex flex-col">
       <div className="banner flex items-center justify-between mb-6">
         <div>
-          <h2 className="banner-title">今日查询</h2>
+          <h2 className="banner-title">历史查询</h2>
           <p className="banner-desc">点击单词可再次查询</p>
         </div>
-        <span className="banner-info">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-          {todayWords.length} 个
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="banner-info">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            {words.length} 个
+          </span>
+          {words.length > 0 && (
+            <button onClick={clearRecentWords} className="banner-btn">
+              清空
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="flex-1 card overflow-hidden">
-        {todayWords.length === 0 ? (
-          <p className="p-4 text-gray-500 text-center">今日暂无查询</p>
+        {words.length === 0 ? (
+          <p className="p-4 text-gray-500 text-center">暂无查询记录</p>
         ) : (
           <ul className="divide-y divide-gray-200 overflow-y-auto h-full">
-            {todayWords.map((word) => (
+            {words.map((word) => (
               <li
                 key={word.id}
                 className="p-3 hover:bg-gray-50 cursor-pointer"
@@ -38,7 +45,7 @@ export function TodayWords() {
                 <div className="flex items-center justify-between">
                   <span className="font-medium text-base">{word.spelling}</span>
                   <span className="text-xs text-gray-400">
-                    {word.addedAt.toLocaleTimeString()}
+                    {new Date(word.addedAt).toLocaleDateString()} {new Date(word.addedAt).toLocaleTimeString()}
                   </span>
                 </div>
                 {word.definitions && word.definitions.length > 0 && (

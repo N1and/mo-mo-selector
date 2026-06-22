@@ -92,12 +92,6 @@ export const useWordStore = create<WordState>((set, get) => ({
     })),
   clearLogs: () => set({ logs: [] }),
   getTodayWords: () => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return get().recentWords.filter((word) => {
-      const wordDate = new Date(word.addedAt);
-      wordDate.setHours(0, 0, 0, 0);
-      return wordDate.getTime() === today.getTime();
-    });
+    return get().recentWords;
   },
 }));

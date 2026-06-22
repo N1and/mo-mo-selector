@@ -8,6 +8,7 @@ export function Settings() {
   const { notepads, setNotepads, setSelectedNotepad } = useNotepadStore();
   const { addLog } = useWordStore();
   const [isSaving, setIsSaving] = useState(false);
+  const [showNotepadPicker, setShowNotepadPicker] = useState(false);
   const showToast = useToastStore((s) => s.show);
 
   useEffect(() => {
@@ -48,6 +49,8 @@ export function Settings() {
       setIsSaving(false);
     }
   };
+
+  const selectedNotepad = notepads.find((n) => n.id === settings.selectedNotepadId);
 
   return (
     <div className="space-y-6">
@@ -95,18 +98,44 @@ export function Settings() {
               <label className="block text-body font-medium text-gray-700 mb-1">
                 默认词本
               </label>
-              <select
-                value={settings.selectedNotepadId}
-                onChange={(e) => updateSettings({ selectedNotepadId: e.target.value })}
-                className="input"
-              >
-                <option value="">请选择词本</option>
-                {notepads.map((notepad) => (
-                  <option key={notepad.id} value={notepad.id}>
-                    {notepad.title}
-                  </option>
-                ))}
-              </select>
+              <div className="relative">
+                <button
+                  onClick={() => setShowNotepadPicker(!showNotepadPicker)}
+                  className="input text-left flex items-center justify-between"
+                >
+                  <span className={selectedNotepad ? '' : 'text-gray-400'}>
+                    {selectedNotepad ? selectedNotepad.title : '请选择词本'}
+                  </span>
+                  <span className="text-gray-400">▾</span>
+                </button>
+                {showNotepadPicker && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 max-h-40 overflow-y-auto z-50">
+                    <button
+                      onClick={() => {
+                        updateSettings({ selectedNotepadId: '' });
+                        setSelectedNotepad(null);
+                        setShowNotepadPicker(false);
+                      }}
+                      className="w-full text-left px-3 py-2 text-sm text-gray-500 hover:bg-gray-50 transition-colors"
+                    >
+                      请选择词本
+                    </button>
+                    {notepads.map((n) => (
+                      <button
+                        key={n.id}
+                        onClick={() => {
+                          updateSettings({ selectedNotepadId: n.id });
+                          setSelectedNotepad(n);
+                          setShowNotepadPicker(false);
+                        }}
+                        className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                      >
+                        {n.title}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

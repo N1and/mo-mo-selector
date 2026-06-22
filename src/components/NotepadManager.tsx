@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNotepadStore, useSettingsStore, useWordStore, useToastStore } from '../stores';
-import { getNotepads, createNotepad, deleteNotepad, updateNotepad } from '../lib/tauri';
+import { getNotepads, createNotepad, deleteNotepad, updateNotepad, getNotepadDetail } from '../lib/tauri';
 import { NotepadViewer } from './NotepadViewer';
 
 export function NotepadManager() {
@@ -170,13 +170,23 @@ export function NotepadManager() {
     }
   };
 
-  const openEditModal = (notepad: any) => {
-    setEditingNotepad(notepad);
-    setNewTitle(notepad.title || '');
-    setNewBrief(notepad.brief || '');
-    setNewTags(notepad.tags || []);
-    setNewContent(notepad.content || '');
-    setShowEditModal(true);
+  const openEditModal = async (notepad: any) => {
+    if (!settings.maimemoToken) return;
+    
+    try {
+      const result = await getNotepadDetail(notepad.id, settings.maimemoToken);
+      const detail = result?.data?.notepad || notepad;
+      
+      setEditingNotepad(notepad);
+      setNewTitle(detail.title || '');
+      setNewBrief(detail.brief || '');
+      setNewTags(detail.tags || []);
+      setNewContent(detail.content || '');
+      setShowEditModal(true);
+    } catch (error) {
+      console.error('Failed to load notepad detail:', error);
+      showToast('加载词本内容失败', 'error');
+    }
   };
 
   const toggleTag = (tag: string) => {
