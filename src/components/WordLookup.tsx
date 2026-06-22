@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { getClipboardText, checkVocabulary, addWordsToNotepad, lookupDictionary, showPopupWindow, closePopupWindow } from '../lib/tauri';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { getClipboardText, checkVocabulary, addWordsToNotepad, lookupDictionary, showPopupWindow, closePopupWindow, getCursorPosition, listenGlobalShortcut, registerHotkey } from '../lib/tauri';
 import { useSettingsStore, useNotepadStore, useWordStore, useToastStore } from '../stores';
 
 interface WordPopup {
@@ -27,18 +27,18 @@ export function WordLookup() {
   const [showNotepadPicker, setShowNotepadPicker] = useState(false);
   const [selectedId, setSelectedId] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const lastTriggerRef = useRef(0);
 
   const lookupWord = useCallback(async (mouseX?: number, mouseY?: number) => {
-    if (!settings.maimemoToken) {
+    const token = useSettingsStore.getState().settings.maimemoToken;
+    if (!token) {
       showToast('请先配置 API Token', 'error');
       addLog('请先配置 API Token', 'error');
       return;
     }
 
     try {
-      // 先关闭已存在的弹窗
       await closePopupWindow();
-      // 等待窗口完全关闭
       await new Promise(resolve => setTimeout(resolve, 200));
       
       const text = await getClipboardText();
@@ -59,20 +59,17 @@ export function WordLookup() {
 
       setIsLoading(true);
       
-      // 先查有道词典获取词形信息（用小写查有道）
       const dictResult = await lookupDictionary(word.toLowerCase()).catch(() => null);
       const dictData = dictResult?.data;
       
-      // 查墨墨词库，先用原词
-      let vocabResult = await checkVocabulary(word, settings.maimemoToken).catch(() => null);
+      let vocabResult = await checkVocabulary(word, token).catch(() => null);
       let vocData = vocabResult?.data?.voc;
       let lookupWord = word;
       
-      // 如果原词没找到，尝试用小写形式
       if (!vocData) {
         const lowerWord = word.toLowerCase();
         if (lowerWord !== word) {
-          const lowerResult = await checkVocabulary(lowerWord, settings.maimemoToken).catch(() => null);
+          const lowerResult = await checkVocabulary(lowerWord, token).catch(() => null);
           if (lowerResult?.data?.voc) {
             vocData = lowerResult.data.voc;
             addLog(`大小写匹配: ${word} → ${lowerWord}`, 'info');
@@ -80,12 +77,11 @@ export function WordLookup() {
         }
       }
       
-      // 如果还没找到，尝试用词形还原
       if (!vocData && dictData?.word_forms?.length > 0) {
         for (const wf of dictData.word_forms) {
           const baseForm = wf.value.toLowerCase();
           if (baseForm !== word.toLowerCase()) {
-            const altResult = await checkVocabulary(baseForm, settings.maimemoToken).catch(() => null);
+            const altResult = await checkVocabulary(baseForm, token).catch(() => null);
             if (altResult?.data?.voc) {
               vocData = altResult.data.voc;
               addLog(`词形还原: ${word} → ${baseForm}`, 'info');
@@ -111,7 +107,7 @@ export function WordLookup() {
           dictData?.phonetic || '',
           dictData?.uk_phonetic || '',
           vocData?.id || '',
-          settings.maimemoToken,
+          token,
           dictData?.word_forms || [],
           dictData?.web_translations || [],
           dictData?.synonyms || [],
@@ -157,7 +153,7 @@ export function WordLookup() {
     } finally {
       setIsLoading(false);
     }
-  }, [settings.maimemoToken]);
+  }, []);
 
   useEffect(() => {
     let lastMouseX = 400;
@@ -166,27 +162,6 @@ export function WordLookup() {
     const handleMouseMove = (e: MouseEvent) => {
       lastMouseX = e.clientX;
       lastMouseY = e.clientY;
-    };
-    
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const hotkey = settings.hotkey.toLowerCase();
-      const parts = hotkey.split('+').map(p => p.trim());
-      
-      const needCtrl = parts.includes('ctrl');
-      const needShift = parts.includes('shift');
-      const needAlt = parts.includes('alt');
-      const key = parts.find(p => !['ctrl', 'shift', 'alt', 'meta'].includes(p));
-      
-      const ctrlMatch = e.ctrlKey === needCtrl;
-      const shiftMatch = e.shiftKey === needShift;
-      const altMatch = e.altKey === needAlt;
-      const keyMatch = e.key.toLowerCase() === key?.toLowerCase();
-      
-      if (ctrlMatch && shiftMatch && altMatch && keyMatch) {
-        e.preventDefault();
-        e.stopPropagation();
-        lookupWord(lastMouseX, lastMouseY);
-      }
     };
 
     const handleRefreshLookup = () => {
@@ -215,8 +190,26 @@ export function WordLookup() {
       }
     };
 
+    const handleGlobalShortcut = async () => {
+      const now = Date.now();
+      if (now - lastTriggerRef.current < 1000) return;
+      lastTriggerRef.current = now;
+      try {
+        const pos = await getCursorPosition();
+        lookupWord(pos.x, pos.y);
+      } catch {
+        lookupWord(lastMouseX, lastMouseY);
+      }
+    };
+
+    registerHotkey(settings.hotkey).catch(() => {});
+
+    let cleanupListener: (() => void) | null = null;
+    listenGlobalShortcut(handleGlobalShortcut).then((cleanup) => {
+      cleanupListener = cleanup;
+    });
+
     window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('keydown', handleKeyDown, true);
     window.addEventListener('app:refresh-lookup', handleRefreshLookup);
     window.addEventListener('app:refresh-current-word', handleRefreshCurrentWord);
     
@@ -237,8 +230,8 @@ export function WordLookup() {
     window.addEventListener('app:show-toast', handleShowToast);
     
     return () => {
+      if (cleanupListener) cleanupListener();
       window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('keydown', handleKeyDown, true);
       window.removeEventListener('app:refresh-lookup', handleRefreshLookup);
       window.removeEventListener('app:refresh-current-word', handleRefreshCurrentWord);
       window.removeEventListener('app:add-log', handleAddLog);

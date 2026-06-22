@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use tauri::Manager;
 use tauri::tray::{TrayIconBuilder, MouseButton, MouseButtonState, TrayIconEvent};
 use tauri::menu::{Menu, MenuItem};
+use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -22,6 +23,52 @@ pub struct Settings {
 
 fn default_auto_start() -> bool { false }
 fn default_hotkey() -> String { "Ctrl+Shift+A".to_string() }
+
+fn parse_hotkey(hotkey_str: &str) -> Result<Shortcut, String> {
+    let parts: Vec<String> = hotkey_str.split('+').map(|p| p.trim().to_lowercase()).collect();
+    let mut modifiers = Modifiers::empty();
+    let mut key_code = None;
+
+    for part in &parts {
+        match part.as_ref() {
+            "ctrl" | "control" => modifiers |= Modifiers::CONTROL,
+            "shift" => modifiers |= Modifiers::SHIFT,
+            "alt" => modifiers |= Modifiers::ALT,
+            "meta" | "super" | "win" | "cmd" | "command" => modifiers |= Modifiers::SUPER,
+            key_str => {
+                let code = match key_str {
+                    "a" => Code::KeyA, "b" => Code::KeyB, "c" => Code::KeyC, "d" => Code::KeyD,
+                    "e" => Code::KeyE, "f" => Code::KeyF, "g" => Code::KeyG, "h" => Code::KeyH,
+                    "i" => Code::KeyI, "j" => Code::KeyJ, "k" => Code::KeyK, "l" => Code::KeyL,
+                    "m" => Code::KeyM, "n" => Code::KeyN, "o" => Code::KeyO, "p" => Code::KeyP,
+                    "q" => Code::KeyQ, "r" => Code::KeyR, "s" => Code::KeyS, "t" => Code::KeyT,
+                    "u" => Code::KeyU, "v" => Code::KeyV, "w" => Code::KeyW, "x" => Code::KeyX,
+                    "y" => Code::KeyY, "z" => Code::KeyZ,
+                    "0" => Code::Digit0, "1" => Code::Digit1, "2" => Code::Digit2,
+                    "3" => Code::Digit3, "4" => Code::Digit4, "5" => Code::Digit5,
+                    "6" => Code::Digit6, "7" => Code::Digit7, "8" => Code::Digit8,
+                    "9" => Code::Digit9,
+                    "space" => Code::Space, "enter" | "return" => Code::Enter,
+                    "tab" => Code::Tab, "escape" | "esc" => Code::Escape,
+                    "backspace" => Code::Backspace, "delete" | "del" => Code::Delete,
+                    "insert" | "ins" => Code::Insert, "home" => Code::Home,
+                    "end" => Code::End, "pageup" | "page_up" => Code::PageUp,
+                    "pagedown" | "page_down" => Code::PageDown,
+                    "arrowup" | "up" => Code::ArrowUp, "arrowdown" | "down" => Code::ArrowDown,
+                    "arrowleft" | "left" => Code::ArrowLeft, "arrowright" | "right" => Code::ArrowRight,
+                    "f1" => Code::F1, "f2" => Code::F2, "f3" => Code::F3, "f4" => Code::F4,
+                    "f5" => Code::F5, "f6" => Code::F6, "f7" => Code::F7, "f8" => Code::F8,
+                    "f9" => Code::F9, "f10" => Code::F10, "f11" => Code::F11, "f12" => Code::F12,
+                    _ => return Err(format!("不支持的按键: {}", key_str)),
+                };
+                key_code = Some(code);
+            }
+        }
+    }
+
+    let code = key_code.ok_or("未指定按键")?;
+    Ok(Shortcut::new(Some(modifiers), code))
+}
 
 impl Default for Settings {
     fn default() -> Self {
@@ -102,20 +149,60 @@ async fn show_popup_window(app: tauri::AppHandle, x: f64, y: f64, word: String, 
         encoded_word, encoded_defs, encoded_examples, encoded_phonetic, encoded_uk, encoded_voc_id, encoded_token, encoded_word_forms, encoded_web_trans, encoded_synonyms, encoded_antonyms
     );
     
-    WebviewWindowBuilder::new(
+    let popup = WebviewWindowBuilder::new(
         &app,
         "popup",
         WebviewUrl::App(url.into()),
     )
     .title(&word)
     .inner_size(popup_width, popup_height)
-    .position(x, y)
+    .position(x - popup_width / 2.0, y - popup_height / 2.0)
     .decorations(false)
     .resizable(false)
     .always_on_top(true)
     .skip_taskbar(true)
     .build()
     .map_err(|e| e.to_string())?;
+
+    let _ = popup.set_focus();
+    let app_handle = app.clone();
+    let title_utf16: Vec<u16> = word.encode_utf16().chain(std::iter::once(0)).collect();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+        #[cfg(target_os = "windows")]
+        unsafe {
+            extern "system" {
+                fn FindWindowW(className: *const u16, windowName: *const u16) -> *mut std::ffi::c_void;
+                fn GetForegroundWindow() -> *mut std::ffi::c_void;
+            }
+            let popup_hwnd = FindWindowW(std::ptr::null(), title_utf16.as_ptr()) as usize;
+            if popup_hwnd == 0 { return; }
+            loop {
+                tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+                let foreground = GetForegroundWindow() as usize;
+                if foreground != 0 && foreground != popup_hwnd {
+                    if let Some(w) = app_handle.get_webview_window("popup") {
+                        let _ = w.close();
+                    }
+                    break;
+                }
+            }
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            loop {
+                tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+                if let Some(w) = app_handle.get_webview_window("popup") {
+                    if let Ok(false) = w.is_focused() {
+                        let _ = w.close();
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            }
+        }
+    });
     
     Ok(())
 }
@@ -312,6 +399,26 @@ async fn add_words_to_notepad(notepad_id: String, voc_ids: Vec<String>, token: S
             "notepad": result_inner["notepad"]
         }
     }))
+}
+
+#[tauri::command]
+async fn register_hotkey(app: tauri::AppHandle, hotkey: String) -> Result<(), String> {
+    let shortcut = parse_hotkey(&hotkey)?;
+    let app_handle = app.clone();
+    app.global_shortcut().on_shortcut(shortcut, move |_app, _shortcut, event| {
+        if event.state == ShortcutState::Pressed {
+            if let Some(window) = app_handle.get_webview_window("main") {
+                let _ = window.eval("window.dispatchEvent(new Event('global-shortcut-triggered'))");
+            }
+        }
+    }).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn unregister_all_hotkeys(app: tauri::AppHandle) -> Result<(), String> {
+    app.global_shortcut().unregister_all().map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -629,6 +736,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
             // 创建托盘菜单
             let show_i = MenuItem::with_id(app, "show", "显示主窗口", true, None::<&str>)?;
@@ -696,7 +804,9 @@ pub fn run() {
             get_word_details,
             add_words_to_study,
             lookup_dictionary,
-            get_cursor_position
+            get_cursor_position,
+            register_hotkey,
+            unregister_all_hotkeys
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

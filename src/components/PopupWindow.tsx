@@ -50,11 +50,6 @@ export function PopupWindow() {
     };
     window.addEventListener('keydown', handleKeyDown);
 
-    const handleBlur = () => {
-      setTimeout(() => closePopupWindow(), 150);
-    };
-    window.addEventListener('blur', handleBlur);
-
     const hash = window.location.hash;
     const qIndex = hash.indexOf('?');
     if (qIndex !== -1) {
@@ -86,7 +81,6 @@ export function PopupWindow() {
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('blur', handleBlur);
     };
   }, []);
 

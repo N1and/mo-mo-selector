@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useSettingsStore, useNotepadStore, useWordStore } from '../stores';
 import { useToastStore } from '../stores/toastStore';
 import { HotkeyPicker } from './HotkeyPicker';
+import { unregisterAllHotkeys, registerHotkey } from '../lib/tauri';
 
 export function Settings() {
   const { settings, isLoaded, updateSettings, saveSettings } = useSettingsStore();
@@ -37,6 +38,11 @@ export function Settings() {
     setIsSaving(true);
     try {
       await saveSettings();
+      // 重新注册全局热键
+      await unregisterAllHotkeys();
+      if (settings.hotkey) {
+        await registerHotkey(settings.hotkey);
+      }
       if (settings.maimemoToken) {
         await loadNotepads();
       }

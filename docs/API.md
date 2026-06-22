@@ -256,9 +256,25 @@ const result = await invoke('lookup_dictionary', { word: 'hello' });
 // result.data.word_forms → { form, value }[]
 ```
 
+### register_hotkey
+
+注册系统级全局快捷键。
+
+```typescript
+await invoke('register_hotkey', { hotkey: 'Ctrl+Shift+A' });
+```
+
+### unregister_all_hotkeys
+
+注销所有已注册的全局快捷键。
+
+```typescript
+await invoke('unregister_all_hotkeys');
+```
+
 ### show_popup_window
 
-创建独立弹窗窗口显示单词释义，位于鼠标光标位置。
+创建独立弹窗窗口显示单词释义，以鼠标位置为中心显示。
 
 ```typescript
 await invoke('show_popup_window', {

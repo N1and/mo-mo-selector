@@ -89,3 +89,19 @@ export async function lookupDictionary(word: string): Promise<any> {
 export async function getCursorPosition(): Promise<{ x: number; y: number }> {
   return invoke('get_cursor_position');
 }
+
+export async function registerHotkey(hotkey: string): Promise<void> {
+  return invoke('register_hotkey', { hotkey });
+}
+
+export async function unregisterAllHotkeys(): Promise<void> {
+  return invoke('unregister_all_hotkeys');
+}
+
+export function listenGlobalShortcut(callback: () => void): Promise<() => void> {
+  return new Promise((resolve) => {
+    const handler = () => callback();
+    window.addEventListener('global-shortcut-triggered', handler);
+    resolve(() => window.removeEventListener('global-shortcut-triggered', handler));
+  });
+}
