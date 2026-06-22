@@ -36,8 +36,11 @@ export function WordLookup() {
     }
 
     try {
+      // 先关闭已存在的弹窗
       await closePopupWindow();
-      await new Promise(resolve => setTimeout(resolve, 150));
+      // 等待窗口完全关闭
+      await new Promise(resolve => setTimeout(resolve, 200));
+      
       const text = await getClipboardText();
       console.log('Clipboard text:', text);
       

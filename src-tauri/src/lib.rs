@@ -73,6 +73,8 @@ async fn show_popup_window(app: tauri::AppHandle, x: f64, y: f64, word: String, 
     // 如果已存在popup窗口，先关闭
     if let Some(window) = app.get_webview_window("popup") {
         let _ = window.destroy();
+        // 等待窗口完全销毁
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     }
     
     let popup_width = 400.0;
@@ -113,7 +115,7 @@ async fn show_popup_window(app: tauri::AppHandle, x: f64, y: f64, word: String, 
 #[tauri::command]
 async fn close_popup_window(app: tauri::AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("popup") {
-        let _ = window.close();
+        let _ = window.destroy();
     }
     Ok(())
 }
