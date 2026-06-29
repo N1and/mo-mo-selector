@@ -39,7 +39,7 @@
 1. 克隆项目
 
 ```bash
-git clone https://github.com/your-username/mo-mo-selector.git
+git clone https://github.com/N1and/mo-mo-selector.git
 cd mo-mo-selector
 ```
 
