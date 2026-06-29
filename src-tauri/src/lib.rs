@@ -6,6 +6,7 @@ use tauri::Manager;
 use tauri::tray::{TrayIconBuilder, MouseButton, MouseButtonState, TrayIconEvent};
 use tauri::menu::{Menu, MenuItem};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+use tauri_plugin_autostart::ManagerExt;
 
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -109,7 +110,20 @@ fn load_settings(app: tauri::AppHandle) -> Result<Settings, String> {
 fn save_settings(app: tauri::AppHandle, settings: Settings) -> Result<(), String> {
     let path = get_settings_path(&app);
     let data = serde_json::to_string_pretty(&settings).map_err(|e| e.to_string())?;
-    fs::write(&path, data).map_err(|e| e.to_string())
+    fs::write(&path, data).map_err(|e| e.to_string())?;
+
+    // 同步开机自启动状态（捕获 panic，不影响保存）
+    let app_clone = app.clone();
+    let auto_start = settings.auto_start;
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if auto_start {
+            let _ = app_clone.autolaunch().enable();
+        } else {
+            let _ = app_clone.autolaunch().disable();
+        }
+    }));
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -407,9 +421,24 @@ async fn register_hotkey(app: tauri::AppHandle, hotkey: String) -> Result<(), St
     let app_handle = app.clone();
     app.global_shortcut().on_shortcut(shortcut, move |_app, _shortcut, event| {
         if event.state == ShortcutState::Pressed {
-            if let Some(window) = app_handle.get_webview_window("main") {
-                let _ = window.eval("window.dispatchEvent(new Event('global-shortcut-triggered'))");
-            }
+            let app_handle = app_handle.clone();
+            std::thread::spawn(move || {
+                #[cfg(target_os = "windows")]
+                unsafe {
+                    extern "system" {
+                        fn keybd_event(bVk: u8, bScan: u8, dwFlags: u32, dwExtraInfo: usize);
+                    }
+                    keybd_event(0x11, 0, 0, 0); // Ctrl down
+                    keybd_event(0x43, 0, 0, 0); // C down
+                    std::thread::sleep(std::time::Duration::from_millis(30));
+                    keybd_event(0x43, 0, 0x0002, 0); // C up
+                    keybd_event(0x11, 0, 0x0002, 0); // Ctrl up
+                    std::thread::sleep(std::time::Duration::from_millis(80));
+                }
+                if let Some(window) = app_handle.get_webview_window("main") {
+                    let _ = window.eval("window.dispatchEvent(new Event('global-shortcut-triggered'))");
+                }
+            });
         }
     }).map_err(|e| e.to_string())?;
     Ok(())
@@ -417,7 +446,8 @@ async fn register_hotkey(app: tauri::AppHandle, hotkey: String) -> Result<(), St
 
 #[tauri::command]
 async fn unregister_all_hotkeys(app: tauri::AppHandle) -> Result<(), String> {
-    app.global_shortcut().unregister_all().map_err(|e| e.to_string())?;
+    // 忽略"没有注册热键"的错误
+    let _ = app.global_shortcut().unregister_all();
     Ok(())
 }
 
@@ -737,7 +767,25 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
         .setup(|app| {
+            // 同步开机自启动状态
+            {
+                let app_handle = app.handle().clone();
+                let path = get_settings_path(&app_handle);
+                if path.exists() {
+                    if let Ok(data) = fs::read_to_string(&path) {
+                        if let Ok(settings) = serde_json::from_str::<Settings>(&data) {
+                            if settings.auto_start {
+                                let _ = app_handle.autolaunch().enable();
+                            } else {
+                                let _ = app_handle.autolaunch().disable();
+                            }
+                        }
+                    }
+                }
+            }
+
             // 创建托盘菜单
             let show_i = MenuItem::with_id(app, "show", "显示主窗口", true, None::<&str>)?;
             let quit_i = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;

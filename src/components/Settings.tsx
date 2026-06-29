@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useSettingsStore, useNotepadStore, useWordStore } from '../stores';
 import { useToastStore } from '../stores/toastStore';
 import { HotkeyPicker } from './HotkeyPicker';
-import { unregisterAllHotkeys, registerHotkey } from '../lib/tauri';
+import { unregisterAllHotkeys } from '../lib/tauri';
 
 export function Settings() {
   const { settings, isLoaded, updateSettings, saveSettings } = useSettingsStore();
@@ -38,11 +38,8 @@ export function Settings() {
     setIsSaving(true);
     try {
       await saveSettings();
-      // 重新注册全局热键
+      // 先注销旧热键，WordLookup 的 useEffect 会自动重新注册新的
       await unregisterAllHotkeys();
-      if (settings.hotkey) {
-        await registerHotkey(settings.hotkey);
-      }
       if (settings.maimemoToken) {
         await loadNotepads();
       }
