@@ -17,21 +17,41 @@ pub async fn lookup_dictionary(word: String) -> Result<serde_json::Value, String
     let phonetic = data["ec"]["word"][0]["usphone"].as_str().unwrap_or("");
     let uk_phonetic = data["ec"]["word"][0]["ukphone"].as_str().unwrap_or("");
 
-    // 提取释义
+    // 提取释义（按词性分组）
+    // 有道 API 返回的 trs 结构：词性（如 "v．"）和编号释义（如 "1. ..."）是分开的 tr 对象
     let mut definitions = Vec::new();
+    let mut current_def = String::new();
     if let Some(trs) = data["ec"]["word"][0]["trs"].as_array() {
         for tr in trs {
             if let Some(tr_item) = tr["tr"].as_array() {
                 for item in tr_item {
                     if let Some(l) = item["l"]["i"].as_array() {
-                        let meaning: Vec<&str> = l.iter().filter_map(|v| v.as_str()).collect();
-                        if !meaning.is_empty() {
-                            definitions.push(meaning.join(" "));
+                        if let Some(text) = l.first().and_then(|v| v.as_str()) {
+                            let text = text.trim().to_string();
+                            if text.is_empty() {
+                                continue;
+                            }
+                            // 判断是否为编号释义（以数字开头）
+                            let is_numbered = text.chars().next().map_or(false, |c| c.is_ascii_digit());
+                            if is_numbered && !current_def.is_empty() {
+                                // 编号释义追加到当前词性下，直接拼接
+                                current_def.push_str(&text);
+                            } else {
+                                // 保存之前的分组
+                                if !current_def.is_empty() {
+                                    definitions.push(current_def);
+                                }
+                                // 开始新分组
+                                current_def = text;
+                            }
                         }
                     }
                 }
             }
         }
+    }
+    if !current_def.is_empty() {
+        definitions.push(current_def);
     }
 
     // 提取词形变化

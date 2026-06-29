@@ -249,7 +249,7 @@ const result = await invoke('check_vocabulary', { spelling: 'hello', token: '...
 
 ```typescript
 const result = await invoke('lookup_dictionary', { word: 'hello' });
-// result.data.definitions → string[]
+// result.data.definitions → string[]（按词性分组，如 "v．1. 承诺...2. 犯罪..."）
 // result.data.phonetic → 美式音标
 // result.data.uk_phonetic → 英式音标
 // result.data.examples → { sentence, translation }[]
@@ -258,6 +258,8 @@ const result = await invoke('lookup_dictionary', { word: 'hello' });
 // result.data.synonyms → string[]
 // result.data.antonyms → string[]
 ```
+
+> **释义格式说明**：`definitions` 数组按词性分组。每条释义以词性标注开头（如 `v．`、`n.`），同一词性下的多条编号释义直接拼接（如 `v．1. 承诺...2. 犯罪...`）。
 
 ### register_hotkey
 
