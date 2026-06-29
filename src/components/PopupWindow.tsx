@@ -4,7 +4,7 @@ import { addWordsToStudy, addWordsToNotepad, getNotepads, closePopupWindow } fro
 interface WordData {
   word: string;
   definitions: string[];
-  examples: { sentence: string; translation: string; pos: string }[];
+  examples: { sentence: string; translation: string }[];
   phonetic: string;
   uk_phonetic: string;
   voc_id: string;
@@ -50,6 +50,7 @@ export function PopupWindow() {
     };
     window.addEventListener('keydown', handleKeyDown);
 
+    // 从 URL 参数读取数据
     const hash = window.location.hash;
     const qIndex = hash.indexOf('?');
     if (qIndex !== -1) {

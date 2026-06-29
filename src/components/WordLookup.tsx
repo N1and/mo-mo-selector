@@ -10,6 +10,77 @@ interface WordPopup {
   data: any;
 }
 
+// 简易词形还原：返回可能的原型列表（按优先级排序）
+function getBaseForms(word: string): string[] {
+  const lower = word.toLowerCase();
+  const forms: string[] = [];
+
+  // double consonant + ing: running → run
+  if (lower.endsWith('ing') && lower.length > 4) {
+    const stem = lower.slice(0, -3);
+    if (stem[stem.length - 1] === stem[stem.length - 2]) {
+      forms.push(stem.slice(0, -1)); // runn -> run
+    }
+    forms.push(stem); // playi -> play
+  }
+
+  // ing: watching → watch
+  if (lower.endsWith('ing') && lower.length > 3) {
+    forms.push(lower.slice(0, -3));
+  }
+
+  // double consonant + ed: stopped → stop
+  if (lower.endsWith('ed') && lower.length > 3) {
+    const stem = lower.slice(0, -2);
+    if (stem[stem.length - 1] === stem[stem.length - 2]) {
+      forms.push(stem.slice(0, -1)); // stopp -> stop
+    }
+  }
+
+  // ed: walked → walk
+  if (lower.endsWith('ed') && lower.length > 2) {
+    forms.push(lower.slice(0, -2));
+  }
+
+  // es: watches → watch, boxes → box
+  if (lower.endsWith('es') && lower.length > 3) {
+    forms.push(lower.slice(0, -2));
+    forms.push(lower.slice(0, -1)); // goes -> go (remove s only)
+  }
+
+  // s: cats → cat (但排除 ss, us, is 等常见后缀)
+  if (lower.endsWith('s') && !lower.endsWith('ss') && lower.length > 2) {
+    forms.push(lower.slice(0, -1));
+  }
+
+  // ly: quickly → quick
+  if (lower.endsWith('ly') && lower.length > 3) {
+    forms.push(lower.slice(0, -2));
+  }
+
+  // er: bigger → big
+  if (lower.endsWith('er') && lower.length > 3) {
+    const stem = lower.slice(0, -2);
+    if (stem[stem.length - 1] === stem[stem.length - 2]) {
+      forms.push(stem.slice(0, -1));
+    }
+    forms.push(stem);
+  }
+
+  // est: biggest → big
+  if (lower.endsWith('est') && lower.length > 4) {
+    const stem = lower.slice(0, -3);
+    if (stem[stem.length - 1] === stem[stem.length - 2]) {
+      forms.push(stem.slice(0, -1));
+    }
+    forms.push(stem);
+  }
+
+  // 去重，保持原词不包含
+  const unique = [...new Set(forms)].filter(f => f !== lower && f.length > 1);
+  return unique;
+}
+
 export function WordLookup() {
   const { settings } = useSettingsStore();
   const { notepads } = useNotepadStore();
@@ -87,6 +158,19 @@ export function WordLookup() {
               addLog(`词形还原: ${word} → ${baseForm}`, 'info');
               break;
             }
+          }
+        }
+      }
+      
+      // 本地简易词形还原兜底（有道未返回 word_forms 时）
+      if (!vocData) {
+        const localForms = getBaseForms(word);
+        for (const baseForm of localForms) {
+          const altResult = await checkVocabulary(baseForm, token).catch(() => null);
+          if (altResult?.data?.voc) {
+            vocData = altResult.data.voc;
+            addLog(`词形还原(本地): ${word} → ${baseForm}`, 'info');
+            break;
           }
         }
       }
