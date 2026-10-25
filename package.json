@@ -12,7 +12,8 @@
     "api:validate": "node scripts/generate-api-doc.cjs validate",
     "api:stats": "node scripts/generate-api-doc.cjs stats",
     "api:serve": "node scripts/generate-api-doc.cjs serve",
-    "api:yaml": "node scripts/generate-api-doc.cjs convert"
+    "api:yaml": "node scripts/generate-api-doc.cjs convert",
+    "kaoyan:import": "node scripts/import-kaoyan-words.cjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
